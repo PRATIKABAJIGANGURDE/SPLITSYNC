@@ -1,5 +1,4 @@
-import { AnalyticsProvider } from '@rork-ai/toolkit-sdk';
-import { RorkDevWrapper } from '@rork-ai/toolkit-dev-sdk/v54';
+
 // template
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
@@ -21,7 +20,7 @@ function RootLayoutNav() {
       <Stack.Screen name="join-trip" options={{ title: "Join Trip", presentation: "modal" }} />
       <Stack.Screen name="trip/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="split/[id]" options={{ title: "Split Details" }} />
-      <Stack.Screen name="create-split" options={{ title: "Create Split", presentation: "modal" }} />
+      <Stack.Screen name="create-split" options={{ headerShown: false, presentation: "modal" }} />
     </Stack>
   );
 }
@@ -41,8 +40,6 @@ function RootLayout() {
     </QueryClientProvider>
   );
 }
-export default function RorkRootLayoutWrapper() {
-  return (
-    <AnalyticsProvider><RorkDevWrapper><RootLayout /></RorkDevWrapper></AnalyticsProvider>
-  );
+export default function RootLayoutWrapper() {
+  return <RootLayout />;
 }

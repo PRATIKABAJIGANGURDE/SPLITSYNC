@@ -53,3 +53,41 @@ export interface Notification {
   relatedSplitId?: string;
   relatedTripId?: string;
 }
+export interface User {
+  id: string;
+  auth_id?: string;
+  name: string;
+  email: string;
+  photoUrl?: string;
+  created_at?: string;
+  updated_at?: string;
+  expoPushToken?: string;
+  upiId?: string;
+}
+
+export interface Balance {
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+}
+
+export interface Payment {
+  id: string;
+  splitId: string;
+  payerId: string;
+  amount: number;
+  status: PaymentStatus;
+  createdAt: string;
+}
+
+export interface TripEvent {
+  id: string;
+  tripId: string;
+  title: string;
+  description?: string;
+  location?: string;
+  startTime: string;
+  endTime?: string;
+  createdBy: string;
+  createdAt: string;
+}

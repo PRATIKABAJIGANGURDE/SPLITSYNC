@@ -6,12 +6,16 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { Receipt, Check } from "lucide-react-native";
+import { Receipt, Check, ChevronLeft } from "lucide-react-native";
 import type { SplitType } from "@/types";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function CreateSplitScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
@@ -104,127 +108,150 @@ export default function CreateSplitScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <View style={styles.iconContainer}>
-        <Receipt size={56} color="#10b981" strokeWidth={2} />
-      </View>
-
-      <Text style={styles.title}>Create Split</Text>
-      <Text style={styles.subtitle}>Split expenses with your trip members</Text>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>Split Name</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., Dinner at Restaurant"
-          placeholderTextColor="#94a3b8"
-          value={splitName}
-          onChangeText={setSplitName}
-        />
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>Total Amount (₹)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="0.00"
-          placeholderTextColor="#94a3b8"
-          value={totalAmount}
-          onChangeText={setTotalAmount}
-          keyboardType="decimal-pad"
-        />
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>Split Type</Text>
-        <View style={styles.splitTypeContainer}>
-          <TouchableOpacity
-            style={[styles.splitTypeButton, splitType === "equal" && styles.splitTypeButtonActive]}
-            onPress={() => setSplitType("equal")}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.splitTypeButtonText,
-                splitType === "equal" && styles.splitTypeButtonTextActive,
-              ]}
+    <View style={styles.container}>
+      <LinearGradient
+        colors={["#0f172a", "#1e293b"]}
+        style={styles.header}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView edges={["top", "left", "right"]}>
+          <View style={styles.headerContent}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backButton}
+              activeOpacity={0.7}
             >
-              Equal Split
-            </Text>
-          </TouchableOpacity>
+              <ChevronLeft size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Create Split</Text>
+            <View style={{ width: 40 }} />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
-          <TouchableOpacity
-            style={[
-              styles.splitTypeButton,
-              splitType === "custom" && styles.splitTypeButtonActive,
-            ]}
-            onPress={() => setSplitType("custom")}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.splitTypeButtonText,
-                splitType === "custom" && styles.splitTypeButtonTextActive,
-              ]}
-            >
-              Custom Split
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.iconContainer}>
+            <Receipt size={56} color="#10b981" strokeWidth={2} />
+          </View>
 
-      <View style={styles.section}>
-        <Text style={styles.label}>Select Members ({selectedMembers.length})</Text>
-        {members.map((member) => {
-          const isSelected = selectedMembers.includes(member!.id);
-          const equalAmount = parseFloat(totalAmount) / selectedMembers.length;
+          <Text style={styles.subtitle}>Split expenses with your trip members</Text>
 
-          return (
-            <View key={member!.id} style={styles.memberItem}>
+          <View style={styles.section}>
+            <Text style={styles.label}>Split Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g., Dinner at Restaurant"
+              placeholderTextColor="#94a3b8"
+              value={splitName}
+              onChangeText={setSplitName}
+            />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Total Amount (₹)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="0.00"
+              placeholderTextColor="#94a3b8"
+              value={totalAmount}
+              onChangeText={setTotalAmount}
+              keyboardType="decimal-pad"
+            />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Split Type</Text>
+            <View style={styles.splitTypeContainer}>
               <TouchableOpacity
-                style={styles.memberCheckbox}
-                onPress={() => toggleMember(member!.id)}
+                style={[styles.splitTypeButton, splitType === "equal" && styles.splitTypeButtonActive]}
+                onPress={() => setSplitType("equal")}
                 activeOpacity={0.7}
               >
-                <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
-                  {isSelected && <Check size={16} color="#ffffff" strokeWidth={3} />}
-                </View>
-                <Text style={styles.memberName}>{member!.name}</Text>
+                <Text
+                  style={[
+                    styles.splitTypeButtonText,
+                    splitType === "equal" && styles.splitTypeButtonTextActive,
+                  ]}
+                >
+                  Equal Split
+                </Text>
               </TouchableOpacity>
 
-              {isSelected && splitType === "custom" && (
-                <TextInput
-                  style={styles.customAmountInput}
-                  placeholder="₹0.00"
-                  placeholderTextColor="#94a3b8"
-                  value={customAmounts[member!.id] || ""}
-                  onChangeText={(amount) => updateCustomAmount(member!.id, amount)}
-                  keyboardType="decimal-pad"
-                />
-              )}
-
-              {isSelected && splitType === "equal" && (
-                <Text style={styles.equalAmount}>
-                  ₹{isNaN(equalAmount) ? "0.00" : equalAmount.toFixed(2)}
+              <TouchableOpacity
+                style={[
+                  styles.splitTypeButton,
+                  splitType === "custom" && styles.splitTypeButtonActive,
+                ]}
+                onPress={() => setSplitType("custom")}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.splitTypeButtonText,
+                    splitType === "custom" && styles.splitTypeButtonTextActive,
+                  ]}
+                >
+                  Custom Split
                 </Text>
-              )}
+              </TouchableOpacity>
             </View>
-          );
-        })}
-      </View>
+          </View>
 
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={handleCreateSplit}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.createButtonText}>Create Split</Text>
-      </TouchableOpacity>
+          <View style={styles.section}>
+            <Text style={styles.label}>Select Members ({selectedMembers.length})</Text>
+            {members.map((member) => {
+              const isSelected = selectedMembers.includes(member!.id);
+              const equalAmount = parseFloat(totalAmount) / selectedMembers.length;
 
-      <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
-        <Text style={styles.cancelButtonText}>Cancel</Text>
-      </TouchableOpacity>
-    </ScrollView>
+              return (
+                <View key={member!.id} style={styles.memberItem}>
+                  <TouchableOpacity
+                    style={styles.memberCheckbox}
+                    onPress={() => toggleMember(member!.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
+                      {isSelected && <Check size={16} color="#ffffff" strokeWidth={3} />}
+                    </View>
+                    <Text style={styles.memberName}>{member!.name}</Text>
+                  </TouchableOpacity>
+
+                  {isSelected && splitType === "custom" && (
+                    <TextInput
+                      style={styles.customAmountInput}
+                      placeholder="₹0.00"
+                      placeholderTextColor="#94a3b8"
+                      value={customAmounts[member!.id] || ""}
+                      onChangeText={(amount) => updateCustomAmount(member!.id, amount)}
+                      keyboardType="decimal-pad"
+                    />
+                  )}
+
+                  {isSelected && splitType === "equal" && (
+                    <Text style={styles.equalAmount}>
+                      ₹{isNaN(equalAmount) ? "0.00" : equalAmount.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={handleCreateSplit}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.createButtonText}>Create Split</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -232,6 +259,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
+  },
+  header: {
+    paddingBottom: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    zIndex: 10,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingTop: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#ffffff",
   },
   scrollContent: {
     paddingHorizontal: 24,
@@ -241,13 +294,6 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: "center",
     marginBottom: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700" as const,
-    color: "#0f172a",
-    textAlign: "center",
-    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
@@ -260,7 +306,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontWeight: "600" as const,
+    fontWeight: "600",
     color: "#0f172a",
     marginBottom: 8,
   },
@@ -271,7 +317,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: "#0f172a",
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: "#e2e8f0",
   },
   splitTypeContainer: {
@@ -281,7 +327,7 @@ const styles = StyleSheet.create({
   splitTypeButton: {
     flex: 1,
     backgroundColor: "#ffffff",
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: "#e2e8f0",
     borderRadius: 12,
     paddingVertical: 14,
@@ -293,7 +339,7 @@ const styles = StyleSheet.create({
   },
   splitTypeButtonText: {
     fontSize: 16,
-    fontWeight: "600" as const,
+    fontWeight: "600",
     color: "#64748b",
   },
   splitTypeButtonTextActive: {
@@ -332,7 +378,7 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 16,
     color: "#0f172a",
-    fontWeight: "500" as const,
+    fontWeight: "500",
   },
   customAmountInput: {
     backgroundColor: "#f8fafc",
@@ -346,7 +392,7 @@ const styles = StyleSheet.create({
   },
   equalAmount: {
     fontSize: 16,
-    fontWeight: "600" as const,
+    fontWeight: "600",
     color: "#10b981",
   },
   createButton: {
@@ -358,18 +404,8 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     fontSize: 18,
-    fontWeight: "600" as const,
+    fontWeight: "600",
     color: "#ffffff",
-  },
-  cancelButton: {
-    paddingVertical: 12,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: "600" as const,
-    color: "#64748b",
   },
   errorContainer: {
     flex: 1,

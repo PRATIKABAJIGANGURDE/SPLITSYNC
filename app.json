@@ -2,27 +2,28 @@
   "expo": {
     "name": "SplitSync",
     "slug": "splitsync",
-    "version": "1.0.0",
+    "version": "1.1.2",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "rork-app",
+    "icon": "./assets/images/icon.jpeg",
+    "scheme": "splitsync-app",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/splash-icon.jpeg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.rork.splitsync"
+      "bundleIdentifier": "com.splitsync.app"
     },
     "android": {
+      "versionCode": 5,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.jpeg",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.splitsync"
+      "package": "com.splitsync.app",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -31,7 +32,19 @@
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": "https://splitsync.app/"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.1.20",
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "minSdkVersion": 24
+          }
         }
       ],
       "expo-font",
@@ -39,6 +52,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://splitsync.app/"
+      },
+      "eas": {
+        "projectId": "fbef358a-1923-4a18-b59b-e6ae50f2aaa5"
+      }
     }
   }
 }

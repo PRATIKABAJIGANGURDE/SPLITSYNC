@@ -2,12 +2,13 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
       ],
       "@rork-ai/toolkit-sdk": [
-        "@rork-ai/toolkit-sdk"
+        "./node_modules/@rork-ai/toolkit-sdk"
       ]
     }
   },
