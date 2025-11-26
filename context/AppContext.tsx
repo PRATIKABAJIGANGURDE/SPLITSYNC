@@ -1,7 +1,7 @@
 import createContextHook from "@nkzw/create-context-hook";
 import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { User, Trip, Split, Notification, SplitType, PaymentStatus, Balance, Payment, TripEvent } from "@/types";
+import type { User, Trip, Split, Notification, SplitType, PaymentStatus, Balance, Payment, TripEvent, ActivityItem } from "@/types";
 import { supabase } from "@/lib/supabase";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
@@ -1335,6 +1335,93 @@ export const [AppProvider, useApp] = createContextHook(() => {
     return result;
   }, [getTripSplits, paymentsQuery.data]);
 
+  const getTripActivity = useCallback(async (tripId: string): Promise<ActivityItem[]> => {
+    const trip = getTripById(tripId);
+    if (!trip) return [];
+
+    const activity: ActivityItem[] = [];
+
+    // 1. Trip Created
+    activity.push({
+      id: `trip-created-${trip.id}`,
+      type: "trip_created",
+      title: "created the trip",
+      subtitle: `Trip "${trip.name}" was created`,
+      timestamp: trip.createdAt,
+      user: getUserById(trip.adminId),
+      relatedId: trip.id,
+    });
+
+    // 2. Splits Created
+    const tripSplits = getTripSplits(tripId);
+    tripSplits.forEach((split) => {
+      activity.push({
+        id: `split-created-${split.id}`,
+        type: "split_created",
+        title: "added a split",
+        subtitle: `${split.name}`,
+        timestamp: split.createdAt,
+        user: getUserById(split.creatorId),
+        amount: split.totalAmount,
+        relatedId: split.id,
+      });
+    });
+
+    // 3. Events Created
+    const tripEvents = getTripEvents(tripId);
+    tripEvents.forEach((event) => {
+      activity.push({
+        id: `event-created-${event.id}`,
+        type: "event_created",
+        title: "added an event",
+        subtitle: `${event.title}`,
+        timestamp: event.createdAt,
+        user: getUserById(event.createdBy),
+        relatedId: event.id,
+      });
+    });
+
+    // 4. Members Joined
+    try {
+      console.log("Fetching trip members for activity...");
+      const { data: members, error } = await supabase
+        .from("trip_members")
+        .select("user_id, created_at")
+        .eq("trip_id", tripId);
+
+      if (error) {
+        console.error("Error fetching trip members:", error);
+      }
+
+      if (members) {
+        console.log("Fetched members:", members.length, members);
+        members.forEach((member) => {
+          if (member.created_at) {
+            const joinedDate = new Date(member.created_at);
+            activity.push({
+              id: `member-joined-${member.user_id}-${tripId}`,
+              type: "member_joined",
+              title: "joined the trip",
+              subtitle: `Joined on ${joinedDate.toLocaleDateString()} at ${joinedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+              timestamp: member.created_at,
+              user: getUserById(member.user_id),
+              relatedId: member.user_id,
+            });
+          } else {
+            console.log("Member has no created_at:", member);
+          }
+        });
+      }
+    } catch (e) {
+      console.error("Error fetching trip members activity:", e);
+    }
+
+    // Sort by timestamp descending
+    const sortedActivity = activity.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    console.log("Final activity list:", sortedActivity.length);
+    return sortedActivity;
+  }, [getTripById, getTripSplits, getTripEvents, getUserById]);
+
   return {
     currentUser,
     users: usersQuery.data || [],
@@ -1379,5 +1466,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     createEvent,
     deleteEvent,
     getTripEvents,
+    getTripActivity,
   };
 });

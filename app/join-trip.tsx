@@ -9,7 +9,7 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { Users, Loader, ChevronLeft } from "lucide-react-native";
@@ -54,6 +54,7 @@ export default function JoinTripScreen() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
         colors={["#0f172a", "#1e293b"]}
         style={styles.header}

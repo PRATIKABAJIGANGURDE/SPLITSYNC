@@ -6,8 +6,12 @@ import {
   ScrollView,
   Alert,
   Share as RNShare,
+  TextInput,
+  ActivityIndicator,
+  Linking,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { useState, useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
 import {
@@ -17,6 +21,7 @@ import {
   XCircle,
   MessageCircle,
   ChevronLeft,
+  ChevronRight,
   Share2,
   Activity,
   Plus,
@@ -25,10 +30,29 @@ import { LinearGradient } from "expo-linear-gradient";
 
 export default function SplitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getSplitById, getUserById, markAsPaid, approvePayment, currentUser, generateWhatsAppMessage } =
-    useApp();
+  const {
+    getSplitById,
+    getUserById,
+    markAsPaid,
+    approvePayment,
+    currentUser,
+    generateWhatsAppMessage,
+    recordPayment,
+    getSplitPayments,
+  } = useApp();
+
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [isPaying, setIsPaying] = useState(false);
+  const [payments, setPayments] = useState<any[]>([]);
 
   const split = getSplitById(id);
+
+  useEffect(() => {
+    if (id) {
+      getSplitPayments(id).then(setPayments);
+    }
+  }, [id, getSplitPayments]);
 
   if (!split) {
     return (
@@ -40,22 +64,146 @@ export default function SplitDetailScreen() {
 
   const creator = getUserById(split.creatorId);
   const isCreator = split.creatorId === currentUser?.id;
+  const myMember = split.members.find((m) => m.userId === currentUser?.id);
 
-  const handleMarkAsPaid = () => {
-    Alert.alert(
-      "Mark as Paid",
-      "Have you completed the payment? This will notify the split creator for approval.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Mark Paid",
-          onPress: () => {
-            markAsPaid(split.id);
-            Alert.alert("Success", "Payment marked as paid! Waiting for approval.");
+  // Calculate my paid amount from payments table
+  const myPaidAmount = payments
+    .filter((p) => p.payerId === currentUser?.id && p.status === "approved")
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  const myPendingAmount = myMember ? myMember.amount - myPaidAmount : 0;
+
+  const handlePay = () => {
+    if (myPendingAmount <= 0) {
+      Alert.alert("All Paid", "You have already paid your share!");
+      return;
+    }
+    setAmount(myPendingAmount.toString());
+    setPaymentModalVisible(true);
+  };
+
+  const handleUpiPayment = async () => {
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid amount");
+      return;
+    }
+
+    if (!creator?.upiId) {
+      Alert.alert(
+        "UPI ID Missing",
+        "The split creator has not set their UPI ID. Please ask them to add it in their profile."
+      );
+      return;
+    }
+
+    const payAmount = parseFloat(amount);
+    const upiUrl = `upi://pay?pa=${creator.upiId}&pn=${encodeURIComponent(
+      creator.name
+    )}&tn=${encodeURIComponent(split.name)}&am=${payAmount}&cu=INR`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(upiUrl);
+      if (canOpen) {
+        await Linking.openURL(upiUrl);
+
+        // Wait for 6 seconds before asking for confirmation
+        // This gives user time to perform payment in UPI app
+        setTimeout(() => {
+          Alert.alert(
+            "Payment Confirmation",
+            "Did you complete the payment in the UPI app?",
+            [
+              { text: "No", style: "cancel" },
+              {
+                text: "Yes, Payment Done",
+                onPress: async () => {
+                  setIsPaying(true);
+                  try {
+                    await recordPayment(split.id, payAmount);
+                    setPaymentModalVisible(false);
+                    Alert.alert("Success", "Payment recorded! Waiting for approval.");
+                    getSplitPayments(id).then(setPayments);
+                  } catch (error) {
+                    Alert.alert("Error", "Failed to record payment");
+                  } finally {
+                    setIsPaying(false);
+                  }
+                },
+              },
+            ]
+          );
+        }, 6000);
+      } else {
+        // Fallback if no UPI app found
+        Alert.alert(
+          "UPI App Not Found",
+          "We couldn't find a supported UPI app. Do you want to mark this as paid manually?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Mark as Paid",
+              onPress: async () => {
+                setIsPaying(true);
+                try {
+                  await recordPayment(split.id, payAmount);
+                  setPaymentModalVisible(false);
+                  Alert.alert("Success", "Payment recorded! Waiting for approval.");
+                  getSplitPayments(id).then(setPayments);
+                } catch (error) {
+                  Alert.alert("Error", "Failed to record payment");
+                } finally {
+                  setIsPaying(false);
+                }
+              },
+            },
+          ]
+        );
+      }
+    } catch (error) {
+      // Fallback on error
+      Alert.alert(
+        "Error Opening UPI",
+        "Failed to open UPI app. Do you want to mark this as paid manually?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Mark as Paid",
+            onPress: async () => {
+              setIsPaying(true);
+              try {
+                await recordPayment(split.id, payAmount);
+                setPaymentModalVisible(false);
+                Alert.alert("Success", "Payment recorded! Waiting for approval.");
+                getSplitPayments(id).then(setPayments);
+              } catch (error) {
+                Alert.alert("Error", "Failed to record payment");
+              } finally {
+                setIsPaying(false);
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
+  };
+
+  const handleManualPayment = async () => {
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid amount");
+      return;
+    }
+
+    setIsPaying(true);
+    try {
+      await recordPayment(split.id, parseFloat(amount));
+      setPaymentModalVisible(false);
+      Alert.alert("Success", "Payment recorded! Waiting for approval.");
+      getSplitPayments(id).then(setPayments);
+    } catch (error) {
+      Alert.alert("Error", "Failed to record payment");
+    } finally {
+      setIsPaying(false);
+    }
   };
 
   const handleApprove = (userId: string) => {
@@ -96,33 +244,42 @@ export default function SplitDetailScreen() {
     }
   };
 
-  const myMember = split.members.find((m) => m.userId === currentUser?.id);
-
   const renderMemberItem = (member: typeof split.members[0]) => {
     const user = getUserById(member.userId);
     if (!user) return null;
 
     const isMe = member.userId === currentUser?.id;
+
+    // Calculate paid amount for this member
+    const memberPaidAmount = payments
+      .filter((p) => p.payerId === member.userId && p.status === "approved")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const memberPending = member.amount - memberPaidAmount;
+
     let statusIcon;
     let statusColor = "#64748b";
     let statusText = "";
 
-    switch (member.status) {
-      case "approved":
-        statusIcon = <CheckCircle size={18} color="#10b981" />;
-        statusColor = "#10b981";
-        statusText = "Paid";
-        break;
-      case "pending_approval":
-        statusIcon = <Clock size={18} color="#f59e0b" />;
-        statusColor = "#f59e0b";
-        statusText = "Pending";
-        break;
-      case "not_paid":
-        statusIcon = <XCircle size={18} color="#ef4444" />;
-        statusColor = "#ef4444";
-        statusText = "Unpaid";
-        break;
+    if (memberPending <= 0.01) { // Floating point tolerance
+      statusIcon = <CheckCircle size={18} color="#10b981" />;
+      statusColor = "#10b981";
+      statusText = "Paid";
+    } else if (memberPaidAmount > 0) {
+      statusIcon = <Clock size={18} color="#f59e0b" />;
+      statusColor = "#f59e0b";
+      statusText = `₹${memberPending.toFixed(0)} Left`;
+    } else {
+      statusIcon = <XCircle size={18} color="#ef4444" />;
+      statusColor = "#ef4444";
+      statusText = "Unpaid";
+    }
+
+    // Override if status is explicitly approved (legacy support)
+    if (member.status === "approved") {
+      statusIcon = <CheckCircle size={18} color="#10b981" />;
+      statusColor = "#10b981";
+      statusText = "Paid";
     }
 
     return (
@@ -292,17 +449,80 @@ export default function SplitDetailScreen() {
         </View>
       </ScrollView>
 
-      {myMember && myMember.status === "not_paid" && !isCreator && (
+      {myMember && myPendingAmount > 0.01 && !isCreator && (
         <SafeAreaView edges={["bottom"]} style={styles.footer}>
           <TouchableOpacity
             style={styles.markPaidButton}
-            onPress={handleMarkAsPaid}
+            onPress={handlePay}
             activeOpacity={0.8}
           >
             <CheckCircle size={24} color="#ffffff" strokeWidth={2.5} />
-            <Text style={styles.markPaidButtonText}>Mark as Paid</Text>
+            <Text style={styles.markPaidButtonText}>Pay Now</Text>
           </TouchableOpacity>
         </SafeAreaView>
+      )}
+
+      {/* Payment Modal */}
+      {paymentModalVisible && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Make Payment</Text>
+            <Text style={styles.modalSubtitle}>Enter amount to pay</Text>
+
+            <View style={styles.amountInputContainer}>
+              <Text style={styles.currencySymbol}>₹</Text>
+              <TextInput
+                style={styles.amountInput}
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="numeric"
+                placeholder="0"
+              />
+            </View>
+
+            <Text style={styles.helperText}>
+              Remaining to pay: ₹{myPendingAmount.toFixed(2)}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.upiButton, isPaying && styles.disabledButton]}
+              onPress={handleUpiPayment}
+              disabled={isPaying}
+            >
+              <LinearGradient
+                colors={["#2563eb", "#1d4ed8"]}
+                style={styles.upiButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {isPaying ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <>
+                    <Text style={styles.upiButtonText}>Pay with UPI</Text>
+                    <ChevronRight size={20} color="#ffffff" />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.manualButton, isPaying && styles.disabledButton]}
+              onPress={handleManualPayment}
+              disabled={isPaying}
+            >
+              <Text style={styles.manualButtonText}>Mark as Paid (Cash/Other)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setPaymentModalVisible(false)}
+              disabled={isPaying}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
     </View>
   );
@@ -584,5 +804,112 @@ const styles = StyleSheet.create({
   historyDate: {
     fontSize: 12,
     color: "#94a3b8",
+  },
+  modalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+    zIndex: 100,
+  },
+  modalContent: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 48,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#64748b",
+    marginBottom: 24,
+    textAlign: "center",
+  },
+  amountInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  currencySymbol: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginRight: 4,
+  },
+  amountInput: {
+    fontSize: 40,
+    fontWeight: "700",
+    color: "#0f172a",
+    minWidth: 100,
+    textAlign: "center",
+  },
+  helperText: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 32,
+  },
+  upiButton: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 12,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  upiButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    gap: 8,
+  },
+  upiButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  manualButton: {
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 16,
+  },
+  manualButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  cancelButton: {
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: "#64748b",
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 });
