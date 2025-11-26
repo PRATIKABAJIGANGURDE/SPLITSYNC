@@ -7,7 +7,7 @@ import {
   Alert,
   Share as RNShare,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
 import {
@@ -16,7 +16,12 @@ import {
   Clock,
   XCircle,
   MessageCircle,
+  ChevronLeft,
+  Share2,
+  Activity,
+  Plus,
 } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function SplitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -81,6 +86,16 @@ export default function SplitDetailScreen() {
     }
   };
 
+  const handleShare = async () => {
+    try {
+      await RNShare.share({
+        message: `Check out this split: ${split.name}\nTotal: ₹${split.totalAmount}`,
+      });
+    } catch (error) {
+      console.error("Error sharing:", error);
+    }
+  };
+
   const myMember = split.members.find((m) => m.userId === currentUser?.id);
 
   const renderMemberItem = (member: typeof split.members[0]) => {
@@ -89,47 +104,24 @@ export default function SplitDetailScreen() {
 
     const isMe = member.userId === currentUser?.id;
     let statusIcon;
-    let statusColor = "#64748b" as const;
+    let statusColor = "#64748b";
     let statusText = "";
-    let actionButton;
 
     switch (member.status) {
       case "approved":
-        statusIcon = <CheckCircle size={24} color="#10b981" />;
+        statusIcon = <CheckCircle size={18} color="#10b981" />;
         statusColor = "#10b981";
         statusText = "Paid";
         break;
       case "pending_approval":
-        statusIcon = <Clock size={24} color="#f59e0b" />;
+        statusIcon = <Clock size={18} color="#f59e0b" />;
         statusColor = "#f59e0b";
-        statusText = "Pending Approval";
-        if (isCreator && !isMe) {
-          actionButton = (
-            <TouchableOpacity
-              style={styles.approveButton}
-              onPress={() => handleApprove(member.userId)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.approveButtonText}>Approve</Text>
-            </TouchableOpacity>
-          );
-        }
+        statusText = "Pending";
         break;
       case "not_paid":
-        statusIcon = <XCircle size={24} color="#ef4444" />;
+        statusIcon = <XCircle size={18} color="#ef4444" />;
         statusColor = "#ef4444";
-        statusText = "Not Paid";
-        if (isCreator && !isMe) {
-          actionButton = (
-            <TouchableOpacity
-              style={styles.reminderButton}
-              onPress={() => handleSendReminder(member.userId)}
-              activeOpacity={0.7}
-            >
-              <MessageCircle size={16} color="#10b981" />
-            </TouchableOpacity>
-          );
-        }
+        statusText = "Unpaid";
         break;
     }
 
@@ -137,12 +129,11 @@ export default function SplitDetailScreen() {
       <View key={member.userId} style={styles.memberCard}>
         <View style={styles.memberInfo}>
           <View style={styles.memberAvatar}>
-            <Text style={styles.memberAvatarText}>{user.name[0]}</Text>
+            <Text style={styles.memberAvatarText}>{user.name[0].toUpperCase()}</Text>
           </View>
           <View style={styles.memberDetails}>
             <Text style={styles.memberName}>
               {isMe ? "You" : user.name}
-              {isMe && !isCreator && <Text style={styles.youBadge}> (You)</Text>}
             </Text>
             <View style={styles.memberStatus}>
               {statusIcon}
@@ -155,7 +146,24 @@ export default function SplitDetailScreen() {
 
         <View style={styles.memberActions}>
           <Text style={styles.memberAmount}>₹{member.amount}</Text>
-          <View>{actionButton}</View>
+          {isCreator && !isMe && member.status === "pending_approval" && (
+            <TouchableOpacity
+              style={styles.approveButton}
+              onPress={() => handleApprove(member.userId)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.approveButtonText}>Approve</Text>
+            </TouchableOpacity>
+          )}
+          {isCreator && !isMe && member.status === "not_paid" && (
+            <TouchableOpacity
+              style={styles.reminderButton}
+              onPress={() => handleSendReminder(member.userId)}
+              activeOpacity={0.7}
+            >
+              <MessageCircle size={16} color="#10b981" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -170,42 +178,117 @@ export default function SplitDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Receipt size={48} color="#10b981" />
-          </View>
-          <Text style={styles.splitName}>{split.name}</Text>
-          <Text style={styles.splitCreator}>Created by {isCreator ? "You" : creator?.name}</Text>
-        </View>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <LinearGradient
+          colors={["#10b981", "#059669"]}
+          style={styles.header}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <SafeAreaView edges={["top"]}>
+            <View style={styles.headerContent}>
+              <View style={styles.headerTop}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                  <ChevronLeft size={24} color="#ffffff" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Split Details</Text>
+                <TouchableOpacity onPress={handleShare} style={styles.shareButton}>
+                  <Share2 size={20} color="#ffffff" />
+                </TouchableOpacity>
+              </View>
 
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Total Amount</Text>
-            <Text style={styles.summaryValue}>₹{split.totalAmount}</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Total Paid</Text>
+              <View style={styles.splitInfo}>
+                <View style={styles.iconCircle}>
+                  <Receipt size={40} color="#10b981" strokeWidth={2.5} />
+                </View>
+                <Text style={styles.splitName}>{split.name}</Text>
+                <Text style={styles.splitCreator}>Created by {isCreator ? "You" : creator?.name}</Text>
+                <Text style={styles.totalAmount}>₹{split.totalAmount}</Text>
+              </View>
+            </View>
+          </SafeAreaView>
+        </LinearGradient>
+
+        <View style={styles.summaryCards}>
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryIconContainer}>
+              <CheckCircle size={24} color="#10b981" />
+            </View>
+            <Text style={styles.summaryLabel}>Paid</Text>
             <Text style={[styles.summaryValue, styles.paidValue]}>₹{totalPaid}</Text>
           </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Total Pending</Text>
+
+          <View style={styles.summaryCard}>
+            <View style={[styles.summaryIconContainer, styles.pendingIconContainer]}>
+              <Clock size={24} color="#ef4444" />
+            </View>
+            <Text style={styles.summaryLabel}>Pending</Text>
             <Text style={[styles.summaryValue, styles.pendingValue]}>₹{totalPending}</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Split Type</Text>
-            <Text style={styles.summaryValue}>
-              {split.type === "equal" ? "Equal" : "Custom"}
-            </Text>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Status</Text>
+          <Text style={styles.sectionTitle}>Members</Text>
           {split.members.map((member) => renderMemberItem(member))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>History</Text>
+          {(() => {
+            const historyEvents = [
+              {
+                type: "created",
+                date: new Date(split.createdAt),
+                title: "Split Created",
+                description: `${isCreator ? "You" : creator?.name} created this split`,
+                icon: <Plus size={16} color="#ffffff" />,
+                color: "#3b82f6",
+              },
+              ...split.members
+                .filter((m) => m.markedPaidAt)
+                .map((m) => {
+                  const u = getUserById(m.userId);
+                  const isMe = u?.id === currentUser?.id;
+                  return {
+                    type: "paid",
+                    date: new Date(m.markedPaidAt!),
+                    title: "Marked as Paid",
+                    description: `${isMe ? "You" : u?.name} marked as paid`,
+                    icon: <CheckCircle size={16} color="#ffffff" />,
+                    color: "#f59e0b",
+                  };
+                }),
+              ...split.members
+                .filter((m) => m.approvedAt)
+                .map((m) => {
+                  const u = getUserById(m.userId);
+                  const isMe = u?.id === currentUser?.id;
+                  return {
+                    type: "approved",
+                    date: new Date(m.approvedAt!),
+                    title: "Payment Approved",
+                    description: `Payment approved for ${isMe ? "You" : u?.name}`,
+                    icon: <CheckCircle size={16} color="#ffffff" />,
+                    color: "#10b981",
+                  };
+                }),
+            ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+            return historyEvents.map((event, index) => (
+              <View key={index} style={styles.historyItem}>
+                <View style={[styles.historyIcon, { backgroundColor: event.color }]}>
+                  {event.icon}
+                </View>
+                <View style={styles.historyContent}>
+                  <Text style={styles.historyTitle}>{event.title}</Text>
+                  <Text style={styles.historyDescription}>{event.description}</Text>
+                  <Text style={styles.historyDate}>
+                    {event.date.toLocaleDateString()} • {event.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+              </View>
+            ));
+          })()}
         </View>
       </ScrollView>
 
@@ -221,16 +304,6 @@ export default function SplitDetailScreen() {
           </TouchableOpacity>
         </SafeAreaView>
       )}
-
-      {isCreator && (
-        <SafeAreaView edges={["bottom"]} style={styles.footer}>
-          <View style={styles.creatorInfo}>
-            <Text style={styles.creatorInfoText}>
-              You are the split creator. Approve payments once received.
-            </Text>
-          </View>
-        </SafeAreaView>
-      )}
     </View>
   );
 }
@@ -238,62 +311,120 @@ export default function SplitDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 20,
+    backgroundColor: "#f1f5f9",
   },
   header: {
-    backgroundColor: "#ffffff",
-    paddingVertical: 32,
-    paddingHorizontal: 24,
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    paddingBottom: 48,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    zIndex: 1,
   },
-  iconContainer: {
+  headerContent: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 24,
+  },
+  backButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  shareButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  splitInfo: {
+    alignItems: "center",
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   splitName: {
-    fontSize: 24,
-    fontWeight: "700" as const,
-    color: "#0f172a",
-    textAlign: "center",
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#ffffff",
     marginBottom: 8,
   },
   splitCreator: {
     fontSize: 16,
-    color: "#64748b",
+    color: "rgba(255,255,255,0.9)",
+    marginBottom: 16,
+  },
+  totalAmount: {
+    fontSize: 40,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  content: {
+    flex: 1,
+  },
+  summaryCards: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    marginTop: -40,
+    gap: 16,
+    zIndex: 2,
   },
   summaryCard: {
+    flex: 1,
     backgroundColor: "#ffffff",
-    marginHorizontal: 24,
-    marginTop: 20,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
+    alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  summaryIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#f0fdf4",
     alignItems: "center",
-    paddingVertical: 12,
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  pendingIconContainer: {
+    backgroundColor: "#fef2f2",
   },
   summaryLabel: {
-    fontSize: 16,
+    fontSize: 14,
     color: "#64748b",
+    marginBottom: 8,
   },
   summaryValue: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: "#0f172a",
+    fontSize: 24,
+    fontWeight: "700",
   },
   paidValue: {
     color: "#10b981",
@@ -301,17 +432,14 @@ const styles = StyleSheet.create({
   pendingValue: {
     color: "#ef4444",
   },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: "#e2e8f0",
-  },
   section: {
     paddingHorizontal: 24,
-    marginTop: 24,
+    marginTop: 32,
+    paddingBottom: 24,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: "700" as const,
+    fontWeight: "700",
     color: "#0f172a",
     marginBottom: 16,
   },
@@ -339,27 +467,23 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#10b981",
+    backgroundColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
   },
   memberAvatarText: {
     fontSize: 20,
-    fontWeight: "700" as const,
-    color: "#ffffff",
+    fontWeight: "700",
+    color: "#475569",
   },
   memberDetails: {
     flex: 1,
   },
   memberName: {
     fontSize: 16,
-    fontWeight: "600" as const,
+    fontWeight: "600",
     color: "#0f172a",
     marginBottom: 4,
-  },
-  youBadge: {
-    fontSize: 14,
-    color: "#10b981",
   },
   memberStatus: {
     flexDirection: "row",
@@ -368,7 +492,7 @@ const styles = StyleSheet.create({
   },
   memberStatusText: {
     fontSize: 14,
-    fontWeight: "500" as const,
+    fontWeight: "500",
   },
   memberActions: {
     alignItems: "flex-end",
@@ -376,18 +500,18 @@ const styles = StyleSheet.create({
   },
   memberAmount: {
     fontSize: 18,
-    fontWeight: "700" as const,
+    fontWeight: "700",
     color: "#0f172a",
   },
   approveButton: {
     backgroundColor: "#10b981",
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 8,
   },
   approveButtonText: {
-    fontSize: 14,
-    fontWeight: "600" as const,
+    fontSize: 13,
+    fontWeight: "600",
     color: "#ffffff",
   },
   reminderButton: {
@@ -410,20 +534,16 @@ const styles = StyleSheet.create({
     marginVertical: 16,
     borderRadius: 16,
     gap: 8,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   markPaidButtonText: {
     fontSize: 18,
-    fontWeight: "600" as const,
+    fontWeight: "700",
     color: "#ffffff",
-  },
-  creatorInfo: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
-  creatorInfoText: {
-    fontSize: 14,
-    color: "#64748b",
-    textAlign: "center",
   },
   errorContainer: {
     flex: 1,
@@ -433,5 +553,36 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 18,
     color: "#64748b",
+  },
+  historyItem: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 24,
+  },
+  historyIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  historyContent: {
+    flex: 1,
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+  historyDescription: {
+    fontSize: 14,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  historyDate: {
+    fontSize: 12,
+    color: "#94a3b8",
   },
 });

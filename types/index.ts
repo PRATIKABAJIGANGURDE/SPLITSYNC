@@ -91,3 +91,14 @@ export interface TripEvent {
   createdBy: string;
   createdAt: string;
 }
+
+export interface ActivityItem {
+  id: string;
+  type: "split_created" | "event_created" | "trip_created" | "member_joined";
+  title: string;
+  subtitle: string;
+  timestamp: string;
+  user?: User;
+  amount?: number;
+  relatedId?: string;
+}

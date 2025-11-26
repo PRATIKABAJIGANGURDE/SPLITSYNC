@@ -6,13 +6,11 @@ import {
   ScrollView,
   Alert,
   Share,
-  Modal,
-  TextInput,
   Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
 import {
   Receipt,
@@ -30,14 +28,15 @@ import {
   Calendar,
   Trash2,
   MapPin,
+  Activity,
 } from "lucide-react-native";
+import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import type { Split, TripEvent } from "@/types";
+import type { Split, TripEvent, ActivityItem } from "@/types";
 import * as Clipboard from "expo-clipboard";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 type ViewMode = "planning" | "expense";
-type ExpenseTab = "splits" | "members" | "summary";
+type ExpenseTab = "splits" | "members" | "summary" | "activity";
 
 export default function TripDashboardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,23 +49,19 @@ export default function TripDashboardScreen() {
     createEvent,
     deleteEvent,
     deleteTrip,
+    getTripActivity,
   } = useApp();
 
   const [viewMode, setViewMode] = useState<ViewMode>("expense");
   const [expenseTab, setExpenseTab] = useState<ExpenseTab>("splits");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
 
-  // Event Form State
-  const [eventTitle, setEventTitle] = useState("");
-  const [eventLocation, setEventLocation] = useState("");
-  const [eventDescription, setEventDescription] = useState("");
-  const [eventStartDate, setEventStartDate] = useState(new Date());
-  const [eventStartTime, setEventStartTime] = useState(new Date());
-  const [eventEndDate, setEventEndDate] = useState(new Date());
-  const [eventEndTime, setEventEndTime] = useState(new Date());
-
-  const [activePicker, setActivePicker] = useState<"start-date" | "start-time" | "end-date" | "end-time" | null>(null);
+  useEffect(() => {
+    if (expenseTab === "activity" && id) {
+      getTripActivity(id).then(setActivity);
+    }
+  }, [expenseTab, id, getTripActivity]);
 
   const trip = getTripById(id);
   const splits = getTripSplits(id);
@@ -135,55 +130,6 @@ export default function TripDashboardScreen() {
     ]);
   };
 
-  const handleAddEvent = async () => {
-    if (!eventTitle.trim()) {
-      Alert.alert("Error", "Please enter an event title");
-      return;
-    }
-
-    try {
-      // Combine dates and times
-      const startDateTime = new Date(eventStartDate);
-      startDateTime.setHours(eventStartTime.getHours());
-      startDateTime.setMinutes(eventStartTime.getMinutes());
-
-      const endDateTime = new Date(eventEndDate);
-      endDateTime.setHours(eventEndTime.getHours());
-      endDateTime.setMinutes(eventEndTime.getMinutes());
-
-      if (endDateTime < startDateTime) {
-        Alert.alert("Error", "End time cannot be before start time");
-        return;
-      }
-
-      await createEvent(
-        trip.id,
-        eventTitle.trim(),
-        startDateTime.toISOString(),
-        endDateTime.toISOString(),
-        eventLocation.trim() || undefined,
-        eventDescription.trim() || undefined
-      );
-
-      setIsAddingEvent(false);
-      // Reset form
-      setEventTitle("");
-      setEventLocation("");
-      setEventDescription("");
-      const now = new Date();
-      setEventStartDate(now);
-      setEventStartTime(now);
-      setEventEndDate(now);
-      setEventEndTime(now);
-
-      // Select the date of the newly created event
-      setSelectedDate(startDateTime);
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", error instanceof Error ? error.message : "Failed to create event");
-    }
-  };
-
   const handleDeleteEvent = (eventId: string) => {
     Alert.alert("Delete Event", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
@@ -229,6 +175,44 @@ export default function TripDashboardScreen() {
   };
 
   const summary = calculateSummary();
+
+  function timeAgo(dateString: string) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + "y ago";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + "mo ago";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + "d ago";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + "h ago";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + "m ago";
+    return "Just now";
+  }
+
+  const getActivityColor = (type: ActivityItem["type"]) => {
+    switch (type) {
+      case "split_created": return "rgba(16, 185, 129, 0.1)";
+      case "event_created": return "rgba(59, 130, 246, 0.1)";
+      case "member_joined": return "rgba(245, 158, 11, 0.1)";
+      case "trip_created": return "rgba(139, 92, 246, 0.1)";
+      default: return "#f1f5f9";
+    }
+  };
+
+  const getActivityIcon = (type: ActivityItem["type"]) => {
+    switch (type) {
+      case "split_created": return <Receipt size={20} color="#10b981" />;
+      case "event_created": return <Calendar size={20} color="#3b82f6" />;
+      case "member_joined": return <Users size={20} color="#f59e0b" />;
+      case "trip_created": return <MapIcon size={20} color="#8b5cf6" />;
+      default: return <Activity size={20} color="#64748b" />;
+    }
+  };
 
   const renderSplitCard = (split: Split) => {
     const creator = getUserById(split.creatorId);
@@ -306,35 +290,89 @@ export default function TripDashboardScreen() {
     );
   };
 
+  const renderActivityView = () => {
+    if (activity.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Activity size={48} color="#cbd5e1" />
+          <Text style={styles.emptyStateText}>No activity yet</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        {activity.map((item) => (
+          <View key={item.id} style={styles.activityItem}>
+            <View style={[styles.activityIcon, { backgroundColor: getActivityColor(item.type) }]}>
+              {getActivityIcon(item.type)}
+            </View>
+            <View style={styles.activityContent}>
+              <Text style={styles.activityTitle}>
+                <Text style={{ fontWeight: "700" }}>{item.user?.name || "Unknown"}</Text> {item.title}
+              </Text>
+              <Text style={styles.activitySubtitle}>{item.subtitle}</Text>
+            </View>
+            <View style={styles.activityMeta}>
+              <Text style={styles.activityTime}>{timeAgo(item.timestamp)}</Text>
+              {item.amount && (
+                <Text style={styles.activityAmount}>₹{item.amount.toFixed(2)}</Text>
+              )}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    );
+  };
+
   const renderExpenseView = () => (
     <View style={styles.content}>
       <View style={styles.chipsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsScroll}
+        >
           <TouchableOpacity
             style={[styles.chip, expenseTab === "splits" && styles.chipActive]}
             onPress={() => setExpenseTab("splits")}
           >
             <Receipt size={16} color={expenseTab === "splits" ? "#ffffff" : "#64748b"} />
-            <Text style={[styles.chipText, expenseTab === "splits" && styles.chipTextActive]}>Splits</Text>
+            <Text style={[styles.chipText, expenseTab === "splits" && styles.chipTextActive]}>
+              Splits
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.chip, expenseTab === "members" && styles.chipActive]}
             onPress={() => setExpenseTab("members")}
           >
             <Users size={16} color={expenseTab === "members" ? "#ffffff" : "#64748b"} />
-            <Text style={[styles.chipText, expenseTab === "members" && styles.chipTextActive]}>Members</Text>
+            <Text style={[styles.chipText, expenseTab === "members" && styles.chipTextActive]}>
+              Members
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.chip, expenseTab === "summary" && styles.chipActive]}
             onPress={() => setExpenseTab("summary")}
           >
             <BarChart3 size={16} color={expenseTab === "summary" ? "#ffffff" : "#64748b"} />
-            <Text style={[styles.chipText, expenseTab === "summary" && styles.chipTextActive]}>Summary</Text>
+            <Text style={[styles.chipText, expenseTab === "summary" && styles.chipTextActive]}>
+              Balances
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.chip, expenseTab === "activity" && styles.chipActive]}
+            onPress={() => setExpenseTab("activity")}
+          >
+            <Activity size={16} color={expenseTab === "activity" ? "#ffffff" : "#64748b"} />
+            <Text style={[styles.chipText, expenseTab === "activity" && styles.chipTextActive]}>
+              Activity
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
 
-      {expenseTab === "splits" && (
+      {expenseTab === "splits" ? (
         <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
           {splits.length === 0 ? (
             <View style={styles.emptyState}>
@@ -346,9 +384,7 @@ export default function TripDashboardScreen() {
             splits.map((split) => renderSplitCard(split))
           )}
         </ScrollView>
-      )}
-
-      {expenseTab === "members" && (
+      ) : expenseTab === "members" ? (
         <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
           {members.map((member) => (
             <View key={member!.id} style={styles.memberCard}>
@@ -369,9 +405,7 @@ export default function TripDashboardScreen() {
             </View>
           ))}
         </ScrollView>
-      )}
-
-      {expenseTab === "summary" && (
+      ) : expenseTab === "summary" ? (
         <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
@@ -392,6 +426,8 @@ export default function TripDashboardScreen() {
             </View>
           </View>
         </ScrollView>
+      ) : (
+        renderActivityView()
       )}
     </View>
   );
@@ -435,7 +471,7 @@ export default function TripDashboardScreen() {
               <Text style={styles.emptyStateText}>Plan your trip by adding events</Text>
               <TouchableOpacity
                 style={styles.emptyStateButton}
-                onPress={() => setIsAddingEvent(true)}
+                onPress={() => router.push(`/create-event?tripId=${trip.id}`)}
               >
                 <Text style={styles.emptyStateButtonText}>Add First Event</Text>
               </TouchableOpacity>
@@ -515,13 +551,13 @@ export default function TripDashboardScreen() {
       {viewMode === "expense" ? renderExpenseView() : renderPlanningView()}
 
       <View style={styles.bottomNavContainer}>
-        <View style={styles.bottomNav}>
+        <BlurView intensity={30} tint="dark" style={styles.bottomNav}>
           <TouchableOpacity
             style={styles.navItem}
             onPress={() => setViewMode("planning")}
           >
             <View style={[styles.navIconWrapper, viewMode === "planning" && styles.navIconActive]}>
-              <MapIcon size={30} color={viewMode === "planning" ? "#ffffff" : "#64748b"} />
+              <MapIcon size={28} color={viewMode === "planning" ? "#ffffff" : "#94a3b8"} />
             </View>
           </TouchableOpacity>
 
@@ -531,7 +567,7 @@ export default function TripDashboardScreen() {
               if (viewMode === "expense") {
                 router.push(`/create-split?tripId=${trip.id}`);
               } else {
-                setIsAddingEvent(true);
+                router.push(`/create-event?tripId=${trip.id}`);
               }
             }}
             activeOpacity={0.9}
@@ -551,145 +587,11 @@ export default function TripDashboardScreen() {
             onPress={() => setViewMode("expense")}
           >
             <View style={[styles.navIconWrapper, viewMode === "expense" && styles.navIconActive]}>
-              <Wallet size={30} color={viewMode === "expense" ? "#ffffff" : "#64748b"} />
+              <Wallet size={28} color={viewMode === "expense" ? "#ffffff" : "#94a3b8"} />
             </View>
           </TouchableOpacity>
-        </View>
+        </BlurView>
       </View>
-
-      <Modal
-        visible={isAddingEvent}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsAddingEvent(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>New Event</Text>
-              <TouchableOpacity onPress={() => setIsAddingEvent(false)}>
-                <XCircle size={24} color="#94a3b8" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={styles.inputLabel}>Title</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="What are we doing?"
-                  placeholderTextColor="#64748b"
-                  value={eventTitle}
-                  onChangeText={setEventTitle}
-                />
-              </View>
-
-              <View style={styles.row}>
-                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.inputLabel}>Starts</Text>
-                  <TouchableOpacity
-                    style={styles.dateTimeButton}
-                    onPress={() => setActivePicker("start-date")}
-                  >
-                    <Calendar size={16} color="#94a3b8" />
-                    <Text style={styles.dateTimeText}>
-                      {eventStartDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.dateTimeButton, { marginTop: 8 }]}
-                    onPress={() => setActivePicker("start-time")}
-                  >
-                    <Clock size={16} color="#94a3b8" />
-                    <Text style={styles.dateTimeText}>
-                      {eventStartTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={styles.inputLabel}>Ends</Text>
-                  <TouchableOpacity
-                    style={styles.dateTimeButton}
-                    onPress={() => setActivePicker("end-date")}
-                  >
-                    <Calendar size={16} color="#94a3b8" />
-                    <Text style={styles.dateTimeText}>
-                      {eventEndDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.dateTimeButton, { marginTop: 8 }]}
-                    onPress={() => setActivePicker("end-time")}
-                  >
-                    <Clock size={16} color="#94a3b8" />
-                    <Text style={styles.dateTimeText}>
-                      {eventEndTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.inputLabel}>Location</Text>
-                <View style={styles.inputWrapper}>
-                  <MapPin size={20} color="#94a3b8" style={styles.inputIcon} />
-                  <TextInput
-                    style={[styles.input, { paddingLeft: 40 }]}
-                    placeholder="Where is it?"
-                    placeholderTextColor="#64748b"
-                    value={eventLocation}
-                    onChangeText={setEventLocation}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.inputLabel}>Description</Text>
-                <TextInput
-                  style={[styles.input, { height: 80, textAlignVertical: "top" }]}
-                  placeholder="Any details?"
-                  placeholderTextColor="#64748b"
-                  value={eventDescription}
-                  onChangeText={setEventDescription}
-                  multiline
-                />
-              </View>
-
-              <TouchableOpacity
-                style={styles.createEventButton}
-                onPress={handleAddEvent}
-              >
-                <Text style={styles.createEventButtonText}>Create Event</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-
-        {activePicker && (
-          <DateTimePicker
-            value={
-              activePicker === "start-date" ? eventStartDate :
-                activePicker === "start-time" ? eventStartTime :
-                  activePicker === "end-date" ? eventEndDate :
-                    eventEndTime
-            }
-            mode={activePicker.includes("date") ? "date" : "time"}
-            is24Hour={false}
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(event, selectedDate) => {
-              const currentPicker = activePicker;
-              setActivePicker(null);
-              if (selectedDate) {
-                if (currentPicker === "start-date") setEventStartDate(selectedDate);
-                if (currentPicker === "start-time") setEventStartTime(selectedDate);
-                if (currentPicker === "end-date") setEventEndDate(selectedDate);
-                if (currentPicker === "end-time") setEventEndTime(selectedDate);
-              }
-            }}
-          />
-        )}
-      </Modal>
     </View>
   );
 }
@@ -935,13 +837,9 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   summaryValue: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     color: "#0f172a",
-  },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: "#f1f5f9",
   },
   summaryOwed: {
     color: "#ef4444",
@@ -949,11 +847,93 @@ const styles = StyleSheet.create({
   summaryOwedToYou: {
     color: "#10b981",
   },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: "#f1f5f9",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#0f172a",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  emptyStateButton: {
+    backgroundColor: "#10b981",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyStateButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  bottomNavContainer: {
+    position: "absolute",
+    bottom: 32,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    pointerEvents: "box-none",
+    zIndex: 100,
+  },
+  bottomNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 100,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    gap: 10,
+    overflow: "hidden",
+    backgroundColor: "rgba(15, 23, 42, 0.8)", // Fallback/Tint
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  navItem: {
+    padding: 4,
+  },
+  navIconWrapper: {
+    width: 54,
+    height: 54,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  navIconActive: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 26,
+  },
+  fabContainer: {
+    marginTop: 0,
+    marginHorizontal: 8,
+  },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
   calendarStrip: {
-    paddingVertical: 16,
-    backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
     marginBottom: 16,
   },
   calendarScroll: {
@@ -961,12 +941,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   dateCard: {
-    width: 64,
-    height: 72,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 16,
-    backgroundColor: "#f8fafc",
     alignItems: "center",
-    justifyContent: "center",
+    minWidth: 70,
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
@@ -980,7 +960,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dateText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
     color: "#0f172a",
   },
@@ -992,19 +972,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   eventTimeContainer: {
-    width: 80,
+    width: 60,
     alignItems: "center",
   },
   eventTime: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
-    color: "#0f172a",
+    color: "#64748b",
     marginBottom: 8,
   },
   timelineLine: {
     width: 2,
     flex: 1,
     backgroundColor: "#e2e8f0",
+    borderRadius: 1,
   },
   timelineDot: {
     width: 10,
@@ -1013,16 +994,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#10b981",
     position: "absolute",
     top: 24,
-    right: -5,
+    left: 25,
+    borderWidth: 2,
+    borderColor: "#f8fafc",
   },
   eventContent: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
     backgroundColor: "#ffffff",
     padding: 16,
     borderRadius: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    marginLeft: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -1041,179 +1024,73 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   eventLocationText: {
-    fontSize: 14,
+    fontSize: 12,
     color: "#64748b",
   },
   deleteEventButton: {
     padding: 8,
-  },
-  bottomNavContainer: {
-    position: "absolute",
-    bottom: 32,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
-  bottomNav: {
-    flexDirection: "row",
-    backgroundColor: "#0f172a",
-    borderRadius: 36,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    gap: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  navItem: {
-    padding: 0,
-  },
-  navIconWrapper: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  navIconActive: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  fabContainer: {
-    marginTop: -4,
-  },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#475569",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: "#64748b",
-    marginBottom: 24,
-    textAlign: "center",
-  },
-  emptyStateButton: {
-    backgroundColor: "#10b981",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  emptyStateButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
+    backgroundColor: "#fef2f2",
+    borderRadius: 8,
+    marginLeft: 8,
   },
   errorContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#f8fafc",
   },
   errorText: {
     fontSize: 18,
     color: "#64748b",
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    padding: 24,
+  listContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 100,
   },
-  modalContent: {
-    backgroundColor: "#0f172a",
-    borderRadius: 24,
-    padding: 24,
-    maxHeight: "80%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  formGroup: {
-    marginBottom: 20,
-  },
-  row: {
-    flexDirection: "row",
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#94a3b8",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  input: {
-    backgroundColor: "#1e293b",
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: "#ffffff",
-  },
-  dateTimeButton: {
+  activityItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1e293b",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-  },
-  dateTimeText: {
-    fontSize: 14,
-    color: "#ffffff",
-    fontWeight: "500",
-  },
-  inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    position: "relative",
-  },
-  inputIcon: {
-    position: "absolute",
-    left: 16,
-    zIndex: 1,
-  },
-  createEventButton: {
     backgroundColor: "#ffffff",
-    paddingVertical: 16,
+    padding: 16,
     borderRadius: 16,
-    alignItems: "center",
-    marginTop: 24,
-    marginBottom: 24,
+    marginBottom: 12,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  createEventButtonText: {
-    fontSize: 16,
+  activityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+  activitySubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  activityMeta: {
+    alignItems: "flex-end",
+  },
+  activityTime: {
+    fontSize: 12,
+    color: "#94a3b8",
+    marginBottom: 2,
+  },
+  activityAmount: {
+    fontSize: 14,
     fontWeight: "700",
     color: "#0f172a",
   },

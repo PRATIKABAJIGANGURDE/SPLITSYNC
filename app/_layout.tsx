@@ -19,8 +19,9 @@ function RootLayoutNav() {
       <Stack.Screen name="create-trip" options={{ title: "Create Trip", presentation: "modal" }} />
       <Stack.Screen name="join-trip" options={{ title: "Join Trip", presentation: "modal" }} />
       <Stack.Screen name="trip/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="split/[id]" options={{ title: "Split Details" }} />
+      <Stack.Screen name="split/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="create-split" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="create-event" options={{ headerShown: false, presentation: "modal" }} />
     </Stack>
   );
 }
