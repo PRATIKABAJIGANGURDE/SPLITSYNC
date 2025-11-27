@@ -9,6 +9,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
+    Linking,
 } from "react-native";
 import { router, Stack } from "expo-router";
 import { useState } from "react";
@@ -31,6 +32,54 @@ export default function ProfileScreen() {
             return;
         }
 
+        // Validate UPI ID format
+        const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+        if (upiId.trim() && !upiRegex.test(upiId.trim())) {
+            Alert.alert(
+                "Invalid UPI ID",
+                "Please enter a valid UPI ID (e.g., username@bank)"
+            );
+            return;
+        }
+
+        // Validate UPI Handle (Bank/PSP)
+        // This is a list of common handles. It's not exhaustive but covers 99% of cases.
+        const validHandles = [
+            "@oksbi", "@okhdfcbank", "@okaxis", "@okicici", "@ybl", "@paytm", "@upi",
+            "@barodampay", "@axl", "@ibl", "@apl", "@pz", "@postbank", "@idfcbank",
+            "@kotak", "@icici", "@axisbank", "@sbi", "@hsbc", "@federal", "@kaypay",
+            "@ikwik", "@aubank", "@indus", "@kbl", "@sib", "@uco", "@unionbank",
+            "@yesbank", "@dbs", "@citi", "@dlb", "@equitas", "@exis", "@freecharge",
+            "@idbi", "@imobile", "@indus", "@iob", "@jio", "@jupiter", "@karnatakabank",
+            "@lvb", "@mab", "@mahb", "@niyo", "@pnb", "@rbl", "@sc", "@slice",
+            "@suratbank", "@syndicate", "@timecosmos", "@uco", "@united", "@utkarsh",
+            "@vijaya", "@yesbank", "@ybl", "@axl", "@ibl", "@paytm", "@apl"
+        ];
+
+        const hasValidHandle = validHandles.some(handle => upiId.trim().toLowerCase().endsWith(handle));
+
+        if (upiId.trim() && !hasValidHandle) {
+            Alert.alert(
+                "Unknown UPI Handle",
+                "The bank handle (part after @) doesn't look familiar. Are you sure it's correct?",
+                [
+                    { text: "Edit", style: "cancel" },
+                    {
+                        text: "Save Anyway",
+                        style: "destructive",
+                        onPress: async () => {
+                            await saveProfile();
+                        }
+                    }
+                ]
+            );
+            return;
+        }
+
+        await saveProfile();
+    };
+
+    const saveProfile = async () => {
         setIsSaving(true);
         try {
             await updateProfile(name.trim(), upiId.trim());
@@ -43,6 +92,35 @@ export default function ProfileScreen() {
             Alert.alert("Error", "Failed to update profile");
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleVerify = async () => {
+        if (!upiId.trim()) {
+            Alert.alert("Error", "Please enter a UPI ID first");
+            return;
+        }
+
+        const upiUrl = `upi://pay?pa=${upiId.trim()}&pn=Verify&am=1&cu=INR`;
+        try {
+            const canOpen = await Linking.canOpenURL(upiUrl);
+            if (canOpen) {
+                Alert.alert(
+                    "Verify UPI ID",
+                    "We will open your UPI app with a ₹1 payment request. You DO NOT need to pay. Just check if the name displayed matches your account.\n\nIf the UPI ID is invalid, the app will tell you.",
+                    [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                            text: "Open App",
+                            onPress: () => Linking.openURL(upiUrl),
+                        },
+                    ]
+                );
+            } else {
+                Alert.alert("Error", "No UPI app found to verify");
+            }
+        } catch (error) {
+            Alert.alert("Error", "Failed to open UPI app");
         }
     };
 
@@ -117,6 +195,14 @@ export default function ProfileScreen() {
                                     placeholderTextColor="#94a3b8"
                                     autoCapitalize="none"
                                 />
+                                {upiId.length > 5 && (
+                                    <TouchableOpacity
+                                        onPress={handleVerify}
+                                        style={styles.verifyButton}
+                                    >
+                                        <Text style={styles.verifyButtonText}>Verify</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                             <Text style={styles.helperText}>
                                 This will be shared with friends so they can pay you directly.
@@ -277,5 +363,17 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: "700",
         color: "#ffffff",
+    },
+    verifyButton: {
+        backgroundColor: "#e2e8f0",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        marginLeft: 8,
+    },
+    verifyButtonText: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: "#475569",
     },
 });

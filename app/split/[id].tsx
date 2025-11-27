@@ -9,11 +9,13 @@ import {
   TextInput,
   ActivityIndicator,
   Linking,
+  RefreshControl,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
+import { supabase } from "@/lib/supabase";
 import {
   Receipt,
   CheckCircle,
@@ -39,20 +41,63 @@ export default function SplitDetailScreen() {
     generateWhatsAppMessage,
     recordPayment,
     getSplitPayments,
+    refreshData,
+    rejectPayment,
   } = useApp();
 
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [amount, setAmount] = useState("");
   const [isPaying, setIsPaying] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   const split = getSplitById(id);
 
-  useEffect(() => {
+  const fetchPayments = useCallback(async () => {
     if (id) {
-      getSplitPayments(id).then(setPayments);
+      const data = await getSplitPayments(id);
+      setPayments(data);
     }
   }, [id, getSplitPayments]);
+
+  useEffect(() => {
+    fetchPayments();
+
+    // Realtime subscription for payments
+    const paymentsSubscription = supabase
+      .channel('payments-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'payments',
+          filter: `split_id=eq.${id}`,
+        },
+        (payload) => {
+          console.log('Realtime payment update:', payload);
+          fetchPayments();
+          refreshData(); // Refresh global data as well
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(paymentsSubscription);
+    };
+  }, [id, fetchPayments, refreshData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshData();
+      await fetchPayments();
+    } catch (error) {
+      console.error("Error refreshing:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshData, fetchPayments]);
 
   if (!split) {
     return (
@@ -71,6 +116,10 @@ export default function SplitDetailScreen() {
     .filter((p) => p.payerId === currentUser?.id && p.status === "approved")
     .reduce((sum, p) => sum + p.amount, 0);
 
+  const myPendingApprovalAmount = payments
+    .filter((p) => p.payerId === currentUser?.id && p.status === "pending")
+    .reduce((sum, p) => sum + p.amount, 0);
+
   const myPendingAmount = myMember ? myMember.amount - myPaidAmount : 0;
 
   const handlePay = () => {
@@ -78,7 +127,14 @@ export default function SplitDetailScreen() {
       Alert.alert("All Paid", "You have already paid your share!");
       return;
     }
-    setAmount(myPendingAmount.toString());
+
+    const remainingToPay = myPendingAmount - myPendingApprovalAmount;
+    if (remainingToPay <= 0.01) {
+      Alert.alert("Pending Approval", "Your payment is waiting for approval.");
+      return;
+    }
+
+    setAmount(remainingToPay.toString());
     setPaymentModalVisible(true);
   };
 
@@ -122,7 +178,7 @@ export default function SplitDetailScreen() {
                     await recordPayment(split.id, payAmount);
                     setPaymentModalVisible(false);
                     Alert.alert("Success", "Payment recorded! Waiting for approval.");
-                    getSplitPayments(id).then(setPayments);
+                    fetchPayments();
                   } catch (error) {
                     Alert.alert("Error", "Failed to record payment");
                   } finally {
@@ -148,7 +204,7 @@ export default function SplitDetailScreen() {
                   await recordPayment(split.id, payAmount);
                   setPaymentModalVisible(false);
                   Alert.alert("Success", "Payment recorded! Waiting for approval.");
-                  getSplitPayments(id).then(setPayments);
+                  fetchPayments();
                 } catch (error) {
                   Alert.alert("Error", "Failed to record payment");
                 } finally {
@@ -174,7 +230,7 @@ export default function SplitDetailScreen() {
                 await recordPayment(split.id, payAmount);
                 setPaymentModalVisible(false);
                 Alert.alert("Success", "Payment recorded! Waiting for approval.");
-                getSplitPayments(id).then(setPayments);
+                fetchPayments();
               } catch (error) {
                 Alert.alert("Error", "Failed to record payment");
               } finally {
@@ -198,7 +254,7 @@ export default function SplitDetailScreen() {
       await recordPayment(split.id, parseFloat(amount));
       setPaymentModalVisible(false);
       Alert.alert("Success", "Payment recorded! Waiting for approval.");
-      getSplitPayments(id).then(setPayments);
+      fetchPayments();
     } catch (error) {
       Alert.alert("Error", "Failed to record payment");
     } finally {
@@ -216,9 +272,38 @@ export default function SplitDetailScreen() {
         {
           text: "Approve",
           style: "default",
-          onPress: () => {
-            approvePayment(split.id, userId);
-            Alert.alert("Success", `Payment approved for ${user?.name}`);
+          onPress: async () => {
+            try {
+              await approvePayment(split.id, userId);
+              Alert.alert("Success", `Payment approved for ${user?.name}`);
+              fetchPayments();
+            } catch (error) {
+              Alert.alert("Error", "Failed to approve payment");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReject = (userId: string) => {
+    const user = getUserById(userId);
+    Alert.alert(
+      "Reject Payment",
+      `Are you sure you want to reject the payment from ${user?.name}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reject",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await rejectPayment(split.id, userId);
+              Alert.alert("Rejected", `Payment rejected for ${user?.name}`);
+              fetchPayments();
+            } catch (error) {
+              Alert.alert("Error", "Failed to reject payment");
+            }
           },
         },
       ]
@@ -255,6 +340,10 @@ export default function SplitDetailScreen() {
       .filter((p) => p.payerId === member.userId && p.status === "approved")
       .reduce((sum, p) => sum + p.amount, 0);
 
+    const memberPendingApprovalAmount = payments
+      .filter((p) => p.payerId === member.userId && p.status === "pending")
+      .reduce((sum, p) => sum + p.amount, 0);
+
     const memberPending = member.amount - memberPaidAmount;
 
     let statusIcon;
@@ -265,6 +354,16 @@ export default function SplitDetailScreen() {
       statusIcon = <CheckCircle size={18} color="#10b981" />;
       statusColor = "#10b981";
       statusText = "Paid";
+    } else if (memberPendingApprovalAmount > 0) {
+      if (memberPending - memberPendingApprovalAmount <= 0.01) {
+        statusIcon = <Clock size={18} color="#f59e0b" />;
+        statusColor = "#f59e0b";
+        statusText = "Pending Approval";
+      } else {
+        statusIcon = <Clock size={18} color="#f59e0b" />;
+        statusColor = "#f59e0b";
+        statusText = `₹${(memberPending - memberPendingApprovalAmount).toFixed(0)} Left`;
+      }
     } else if (memberPaidAmount > 0) {
       statusIcon = <Clock size={18} color="#f59e0b" />;
       statusColor = "#f59e0b";
@@ -303,16 +402,25 @@ export default function SplitDetailScreen() {
 
         <View style={styles.memberActions}>
           <Text style={styles.memberAmount}>₹{member.amount}</Text>
-          {isCreator && !isMe && member.status === "pending_approval" && (
-            <TouchableOpacity
-              style={styles.approveButton}
-              onPress={() => handleApprove(member.userId)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.approveButtonText}>Approve</Text>
-            </TouchableOpacity>
+          {isCreator && !isMe && memberPendingApprovalAmount > 0 && (
+            <View style={styles.approvalActions}>
+              <TouchableOpacity
+                style={styles.rejectButton}
+                onPress={() => handleReject(member.userId)}
+                activeOpacity={0.7}
+              >
+                <XCircle size={20} color="#ef4444" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.approveButton}
+                onPress={() => handleApprove(member.userId)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.approveButtonText}>Approve</Text>
+              </TouchableOpacity>
+            </View>
           )}
-          {isCreator && !isMe && member.status === "not_paid" && (
+          {isCreator && !isMe && member.status === "not_paid" && memberPendingApprovalAmount <= 0 && (
             <TouchableOpacity
               style={styles.reminderButton}
               onPress={() => handleSendReminder(member.userId)}
@@ -335,7 +443,13 @@ export default function SplitDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <LinearGradient
           colors={["#10b981", "#059669"]}
           style={styles.header}
@@ -911,5 +1025,17 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.7,
+  },
+  approvalActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  rejectButton: {
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

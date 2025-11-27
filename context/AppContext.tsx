@@ -694,7 +694,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const approvePaymentMutation = useMutation({
     mutationFn: async ({ splitId, userId }: { splitId: string; userId: string }) => {
-      const { error } = await supabase
+      // 1. Update split_members status
+      const { error: memberError } = await supabase
         .from("split_members")
         .update({
           status: "approved",
@@ -703,10 +704,52 @@ export const [AppProvider, useApp] = createContextHook(() => {
         .eq("split_id", splitId)
         .eq("user_id", userId);
 
-      if (error) throw error;
+      if (memberError) throw memberError;
+
+      // 2. Update all pending payments to approved
+      const { error: paymentsError } = await supabase
+        .from("payments")
+        .update({ status: "approved" })
+        .eq("split_id", splitId)
+        .eq("payer_id", userId)
+        .eq("status", "pending");
+
+      if (paymentsError) throw paymentsError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["splits"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+    },
+  });
+
+  const rejectPaymentMutation = useMutation({
+    mutationFn: async ({ splitId, userId }: { splitId: string; userId: string }) => {
+      // 1. Update all pending payments to rejected
+      const { error: paymentsError } = await supabase
+        .from("payments")
+        .update({ status: "rejected" })
+        .eq("split_id", splitId)
+        .eq("payer_id", userId)
+        .eq("status", "pending");
+
+      if (paymentsError) throw paymentsError;
+
+      // 2. Update split_members status back to not_paid if it was pending_approval
+      const { error: memberError } = await supabase
+        .from("split_members")
+        .update({
+          status: "not_paid",
+          marked_paid_at: null,
+        })
+        .eq("split_id", splitId)
+        .eq("user_id", userId)
+        .eq("status", "pending_approval");
+
+      if (memberError) throw memberError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["splits"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
     },
   });
 
@@ -980,7 +1023,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const { mutateAsync: joinTripAsync } = joinTripMutation;
   const { mutateAsync: createSplitAsync } = createSplitMutation;
   const { mutate: markAsPaidMutate } = markAsPaidMutation;
-  const { mutate: approvePaymentMutate } = approvePaymentMutation;
+  const { mutateAsync: approvePaymentMutateAsync } = approvePaymentMutation;
+  const { mutateAsync: rejectPaymentMutateAsync } = rejectPaymentMutation;
   const { mutateAsync: deleteSplitAsync } = deleteSplitMutation;
   const { mutateAsync: deleteTripAsync } = deleteTripMutation;
   const { mutateAsync: removeMemberAsync } = removeMemberMutation;
@@ -1095,10 +1139,17 @@ export const [AppProvider, useApp] = createContextHook(() => {
   );
 
   const approvePayment = useCallback(
-    (splitId: string, userId: string) => {
-      approvePaymentMutate({ splitId, userId });
+    async (splitId: string, userId: string) => {
+      await approvePaymentMutateAsync({ splitId, userId });
     },
-    [approvePaymentMutate]
+    [approvePaymentMutateAsync]
+  );
+
+  const rejectPayment = useCallback(
+    async (splitId: string, userId: string) => {
+      await rejectPaymentMutateAsync({ splitId, userId });
+    },
+    [rejectPaymentMutateAsync]
   );
 
   const deleteSplit = useCallback(
@@ -1412,8 +1463,45 @@ export const [AppProvider, useApp] = createContextHook(() => {
           }
         });
       }
+
     } catch (e) {
       console.error("Error fetching trip members activity:", e);
+    }
+
+    // 5. Payments (Approved and Recorded)
+    try {
+      const splitIds = tripSplits.map((s) => s.id);
+      console.log("Fetching payments for splits:", splitIds);
+      if (splitIds.length > 0) {
+        const { data: payments, error } = await supabase
+          .from("payments")
+          .select("*")
+          .in("split_id", splitIds)
+          .in("status", ["approved", "pending"]); // Fetch both approved and pending
+
+        if (error) {
+          console.error("Error fetching payments for activity:", error);
+        } else if (payments) {
+          console.log("Fetched payments for activity:", payments.length, payments);
+          payments.forEach((payment) => {
+            const split = tripSplits.find((s) => s.id === payment.split_id);
+            const isApproved = payment.status === "approved";
+
+            activity.push({
+              id: `payment-${payment.status}-${payment.id}`,
+              type: isApproved ? "payment_approved" : "payment_recorded",
+              title: isApproved ? "paid for a split" : "recorded a payment",
+              subtitle: `${isApproved ? "Paid" : "Recorded"} ₹${payment.amount} for ${split?.name || "a split"}`,
+              timestamp: payment.created_at,
+              user: getUserById(payment.payer_id),
+              amount: parseFloat(payment.amount),
+              relatedId: payment.split_id,
+            });
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching payment activity:", e);
     }
 
     // Sort by timestamp descending
@@ -1448,6 +1536,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     createSplit,
     markAsPaid,
     approvePayment,
+    rejectPayment,
     getUserTrips,
     getTripSplits,
     getUserById,
@@ -1467,5 +1556,15 @@ export const [AppProvider, useApp] = createContextHook(() => {
     deleteEvent,
     getTripEvents,
     getTripActivity,
+    refreshData: async () => {
+      await Promise.all([
+        tripsQuery.refetch(),
+        splitsQuery.refetch(),
+        usersQuery.refetch(),
+        paymentsQuery.refetch(),
+        eventsQuery.refetch(),
+        notificationsQuery.refetch(),
+      ]);
+    },
   };
 });

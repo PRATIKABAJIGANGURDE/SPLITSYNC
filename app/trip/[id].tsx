@@ -200,6 +200,8 @@ export default function TripDashboardScreen() {
       case "event_created": return "rgba(59, 130, 246, 0.1)";
       case "member_joined": return "rgba(245, 158, 11, 0.1)";
       case "trip_created": return "rgba(139, 92, 246, 0.1)";
+      case "payment_approved": return "rgba(16, 185, 129, 0.1)";
+      case "payment_recorded": return "rgba(245, 158, 11, 0.1)";
       default: return "#f1f5f9";
     }
   };
@@ -210,6 +212,8 @@ export default function TripDashboardScreen() {
       case "event_created": return <Calendar size={20} color="#3b82f6" />;
       case "member_joined": return <Users size={20} color="#f59e0b" />;
       case "trip_created": return <MapIcon size={20} color="#8b5cf6" />;
+      case "payment_approved": return <CheckCircle size={20} color="#10b981" />;
+      case "payment_recorded": return <Clock size={20} color="#f59e0b" />;
       default: return <Activity size={20} color="#64748b" />;
     }
   };

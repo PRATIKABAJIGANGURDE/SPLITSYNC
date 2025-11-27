@@ -94,7 +94,7 @@ export interface TripEvent {
 
 export interface ActivityItem {
   id: string;
-  type: "split_created" | "event_created" | "trip_created" | "member_joined";
+  type: "split_created" | "event_created" | "trip_created" | "member_joined" | "payment_approved" | "payment_recorded";
   title: string;
   subtitle: string;
   timestamp: string;
