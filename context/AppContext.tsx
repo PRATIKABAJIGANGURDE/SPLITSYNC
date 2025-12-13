@@ -7,6 +7,8 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 
 function generateJoinCode(): string {
   return Math.floor(1000000000 + Math.random() * 9000000000).toString();
@@ -447,6 +449,45 @@ export const [AppProvider, useApp] = createContextHook(() => {
     onSuccess: () => {
       setCurrentUser(null);
       queryClient.clear();
+    },
+  });
+
+  const signInWithGoogleMutation = useMutation({
+    mutationFn: async () => {
+      const redirectUrl = Linking.createURL("google-auth", {
+        scheme: "splitsync-app",
+      });
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectUrl
+        );
+
+        if (result.type === "success" && result.url) {
+          const params = new URLSearchParams(result.url.split("#")[1]);
+          const accessToken = params.get("access_token");
+          const refreshToken = params.get("refresh_token");
+
+          if (accessToken && refreshToken) {
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (sessionError) throw sessionError;
+          }
+        }
+      }
     },
   });
 
@@ -1517,35 +1558,42 @@ export const [AppProvider, useApp] = createContextHook(() => {
     splits: splitsQuery.data || [],
     events: eventsQuery.data || [],
     notifications: notificationsQuery.data || [],
-    isLoading: tripsQuery.isLoading || splitsQuery.isLoading || usersQuery.isLoading || paymentsQuery.isLoading || eventsQuery.isLoading,
+    isLoading:
+      tripsQuery.isLoading ||
+      splitsQuery.isLoading ||
+      usersQuery.isLoading ||
+      notificationsQuery.isLoading ||
+      eventsQuery.isLoading,
     isRefetching: tripsQuery.isRefetching || splitsQuery.isRefetching || usersQuery.isRefetching || paymentsQuery.isRefetching || eventsQuery.isRefetching,
-    signUp,
-    login,
-    logout,
-    verifyOtp,
-    resendOtp,
-    isSigningUp,
-    isLoggingIn,
-    isVerifyingOtp,
-    isResendingOtp,
+    signUp: signUpMutation.mutateAsync,
+    login: loginMutation.mutateAsync,
+    signInWithGoogle: signInWithGoogleMutation.mutateAsync,
+    logout: logoutMutation.mutate,
+    verifyOtp: verifyOtpMutation.mutateAsync,
+    resendOtp: resendOtpMutation.mutateAsync,
+    isSigningUp: signUpMutation.isPending,
+    isLoggingIn: loginMutation.isPending,
+    isLoggingInWithGoogle: signInWithGoogleMutation.isPending,
+    isVerifyingOtp: verifyOtpMutation.isPending,
+    isResendingOtp: resendOtpMutation.isPending,
     signUpError,
     loginError,
     verifyOtpError,
-    createTrip,
-    joinTrip,
-    createSplit,
-    markAsPaid,
-    approvePayment,
-    rejectPayment,
+    createTrip: createTripMutation.mutateAsync,
+    joinTrip: joinTripMutation.mutateAsync,
+    createSplit: createSplitMutation.mutateAsync,
+    markAsPaid: markAsPaidMutation.mutateAsync,
+    approvePayment: approvePaymentMutation.mutateAsync,
+    rejectPayment: rejectPaymentMutation.mutateAsync,
     getUserTrips,
     getTripSplits,
     getUserById,
     getTripById,
     getSplitById,
     generateWhatsAppMessage,
-    deleteSplit,
-    deleteTrip,
-    removeMember,
+    deleteSplit: deleteSplitMutation.mutateAsync,
+    deleteTrip: deleteTripMutation.mutateAsync,
+    removeMember: removeMemberMutation.mutateAsync,
     calculateTripBalances,
     updateProfile,
     recordPayment,

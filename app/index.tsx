@@ -53,6 +53,8 @@ export default function HomeScreen() {
     logout,
     isSigningUp,
     isLoggingIn,
+    isLoggingInWithGoogle,
+    signInWithGoogle,
     isVerifyingOtp,
     isResendingOtp,
     isLoading,
@@ -77,7 +79,7 @@ export default function HomeScreen() {
         return;
       }
 
-      await signUp(email.trim(), password, name.trim());
+      await signUp({ email: email.trim(), password, name: name.trim() });
       setAuthMode("verify");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Success", "Please check your email for verification code");
@@ -95,11 +97,22 @@ export default function HomeScreen() {
         return;
       }
 
-      await login(email.trim(), password);
+      await login({ email: email.trim(), password });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Error", error?.message || "Failed to log in");
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await signInWithGoogle();
+      // Success is handled by the redirect and session update
+    } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", error?.message || "Failed to sign in with Google");
     }
   };
 
@@ -111,7 +124,7 @@ export default function HomeScreen() {
         return;
       }
 
-      await verifyOtp(email.trim(), otp.trim());
+      await verifyOtp({ email: email.trim(), otp: otp.trim() });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Success", "Email verified successfully!");
     } catch (error: any) {
@@ -406,6 +419,26 @@ export default function HomeScreen() {
                             )}
                           </LinearGradient>
                         </TouchableOpacity>
+
+                        {authMode === "login" && (
+                          <TouchableOpacity
+                            style={[styles.primaryButton, { marginTop: 12, backgroundColor: "#ffffff" }]}
+                            onPress={handleGoogleLogin}
+                            disabled={isLoggingInWithGoogle}
+                          >
+                            <View style={[styles.primaryButtonGradient, { backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#e2e8f0" }]}>
+                              {isLoggingInWithGoogle ? (
+                                <ActivityIndicator color="#0f172a" />
+                              ) : (
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                  <Text style={[styles.primaryButtonText, { color: "#0f172a" }]}>
+                                    Sign in with Google
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        )}
 
                         <TouchableOpacity
                           onPress={() =>

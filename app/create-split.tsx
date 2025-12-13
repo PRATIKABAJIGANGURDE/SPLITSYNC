@@ -87,7 +87,13 @@ export default function CreateSplitScreen() {
     }
 
     try {
-      createSplit(tripId, splitName.trim(), amount, splitType, memberAmounts);
+      createSplit({
+        tripId,
+        name: splitName.trim(),
+        totalAmount: amount,
+        type: splitType,
+        members: memberAmounts,
+      });
       Alert.alert("Success", "Split created successfully!", [
         {
           text: "OK",

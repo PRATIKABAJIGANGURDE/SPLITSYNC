@@ -274,7 +274,7 @@ export default function SplitDetailScreen() {
           style: "default",
           onPress: async () => {
             try {
-              await approvePayment(split.id, userId);
+              await approvePayment({ splitId: split.id, userId });
               Alert.alert("Success", `Payment approved for ${user?.name}`);
               fetchPayments();
             } catch (error) {
@@ -298,7 +298,7 @@ export default function SplitDetailScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await rejectPayment(split.id, userId);
+              await rejectPayment({ splitId: split.id, userId });
               Alert.alert("Rejected", `Payment rejected for ${user?.name}`);
               fetchPayments();
             } catch (error) {

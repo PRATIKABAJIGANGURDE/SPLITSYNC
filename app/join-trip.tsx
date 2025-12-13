@@ -29,7 +29,7 @@ export default function JoinTripScreen() {
 
     setIsJoining(true);
     try {
-      const trip = joinTrip(joinCode.trim());
+      const trip = await joinTrip(joinCode.trim());
       if (!trip) {
         Alert.alert("Error", "Invalid join code. Please check and try again.");
         setIsJoining(false);

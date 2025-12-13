@@ -29,7 +29,7 @@ export default function CreateTripScreen() {
 
     setIsCreating(true);
     try {
-      const trip = createTrip(tripName.trim());
+      const trip = await createTrip(tripName.trim());
       Alert.alert(
         "Trip Created!",
         `Your trip "${trip.name}" has been created.\n\nJoin Code: ${trip.joinCode}\n\nShare this code with your friends!`,
