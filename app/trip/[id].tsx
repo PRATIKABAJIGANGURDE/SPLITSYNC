@@ -35,7 +35,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { Split, TripEvent, ActivityItem } from "@/types";
 import * as Clipboard from "expo-clipboard";
 
-type ViewMode = "planning" | "expense";
+import LiveMap from "@/components/LiveMap";
+
+type ViewMode = "planning" | "expense" | "map";
 type ExpenseTab = "splits" | "members" | "summary" | "activity";
 
 export default function TripDashboardScreen() {
@@ -552,7 +554,13 @@ export default function TripDashboardScreen() {
         </SafeAreaView>
       </LinearGradient>
 
-      {viewMode === "expense" ? renderExpenseView() : renderPlanningView()}
+      {viewMode === "expense" ? (
+        renderExpenseView()
+      ) : viewMode === "planning" ? (
+        renderPlanningView()
+      ) : (
+        <LiveMap trip={trip} currentUserId={currentUser?.id || ""} />
+      )}
 
       <View style={styles.bottomNavContainer}>
         <BlurView intensity={30} tint="dark" style={styles.bottomNav}>
@@ -561,7 +569,16 @@ export default function TripDashboardScreen() {
             onPress={() => setViewMode("planning")}
           >
             <View style={[styles.navIconWrapper, viewMode === "planning" && styles.navIconActive]}>
-              <MapIcon size={28} color={viewMode === "planning" ? "#ffffff" : "#94a3b8"} />
+              <Calendar size={28} color={viewMode === "planning" ? "#ffffff" : "#94a3b8"} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.navItem}
+            onPress={() => setViewMode("map")}
+          >
+            <View style={[styles.navIconWrapper, viewMode === "map" && styles.navIconActive]}>
+              <MapIcon size={28} color={viewMode === "map" ? "#ffffff" : "#94a3b8"} />
             </View>
           </TouchableOpacity>
 

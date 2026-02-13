@@ -16,6 +16,9 @@ export interface Trip {
   memberIds: string[];
   createdAt: string;
   updated_at?: string;
+  destinationLat?: number;
+  destinationLng?: number;
+  destinationName?: string;
 }
 
 export type SplitType = "equal" | "custom";

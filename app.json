@@ -14,7 +14,17 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.splitsync.app"
+      "bundleIdentifier": "com.splitsync.app",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SplitSync needs your location to share your position with trip members even when the app is closed.",
+        "NSLocationWhenInUseUsageDescription": "SplitSync needs your location to share your position with trip members.",
+        "NSLocationAlwaysUsageDescription": "SplitSync needs your location to share your position with trip members even when the app is closed.",
+        "NSMicrophoneUsageDescription": "SplitSync needs access to your microphone to send walkie-talkie voice messages to your trip members."
+      }
     },
     "android": {
       "versionCode": 5,
@@ -23,7 +33,15 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.splitsync.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -49,7 +67,13 @@
       ],
       "expo-font",
       "@react-native-community/datetimepicker",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow SplitSync to access your microphone to send walkie-talkie messages."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

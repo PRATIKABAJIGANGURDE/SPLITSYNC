@@ -1,0 +1,422 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, TouchableOpacity, Text, ActivityIndicator, Alert } from 'react-native';
+import { Audio } from 'expo-av';
+import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react-native';
+import { supabase } from '../lib/supabase';
+import { User } from '../types';
+
+interface WalkieTalkieProps {
+    tripId: string;
+    currentUser: User | null;
+}
+
+export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps) {
+    const recordingRef = useRef<Audio.Recording | null>(null);
+    const isPressedRef = useRef(false);
+    const audioLock = useRef(false);
+    const [permissionResponse, requestPermission] = Audio.usePermissions();
+    const [isRecording, setIsRecording] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [speakerName, setSpeakerName] = useState<string | null>(null);
+    const soundRef = useRef<Audio.Sound | null>(null);
+
+    // Subscribe to new voice messages
+    useEffect(() => {
+        if (!tripId || !currentUser) return;
+
+        const channel = supabase
+            .channel(`walkie-talkie:${tripId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'voice_messages',
+                    filter: `trip_id=eq.${tripId}`,
+                },
+                async (payload) => {
+                    const newMessage = payload.new;
+
+                    // Don't play own messages
+                    if (newMessage.user_id === currentUser.id) return;
+
+                    // Don't play if muted
+                    if (isMuted) return;
+
+                    console.log('Received voice message:', newMessage);
+
+                    try {
+                        // Get user name for UI
+                        const { data: userData } = await supabase
+                            .from('users')
+                            .select('name')
+                            .eq('id', newMessage.user_id)
+                            .single();
+
+                        setSpeakerName(userData?.name || 'Someone');
+                        playAudio(newMessage.public_url);
+                    } catch (error) {
+                        console.error('Error handling incoming voice message:', error);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [tripId, currentUser, isMuted]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            isPressedRef.current = false;
+            // Force release lock on unmount
+            audioLock.current = false;
+            if (recordingRef.current) {
+                recordingRef.current.stopAndUnloadAsync();
+            }
+            if (soundRef.current) {
+                soundRef.current.unloadAsync();
+            }
+        };
+    }, []);
+
+    async function startRecording() {
+        console.log('Button pressed in (startRecording called)');
+        if (audioLock.current) {
+            console.log("Audio lock is busy, ignoring start request.");
+            return;
+        }
+
+        isPressedRef.current = true;
+        audioLock.current = true;
+
+        try {
+            // Check permissions first
+            if (permissionResponse?.status !== 'granted') {
+                const { status } = await requestPermission();
+                if (status !== 'granted') {
+                    audioLock.current = false;
+                    return;
+                }
+            }
+
+            // Cleanup any existing (stale) recording first
+            if (recordingRef.current) {
+                console.warn("Unloading stale recording...");
+                try {
+                    await recordingRef.current.stopAndUnloadAsync();
+                } catch (e) {
+                    // Ignore stale cleanup errors
+                }
+                recordingRef.current = null;
+            }
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: true,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
+            });
+
+            // Start recording setup
+            const { recording: newRecording } = await Audio.Recording.createAsync(
+                Audio.RecordingOptionsPresets.HIGH_QUALITY
+            );
+
+            // CRITICAL CHECK: Did user release the button while we were loading?
+            if (!isPressedRef.current) {
+                console.log("Recording started but user already released. Stopping and discarding.");
+                try {
+                    await newRecording.stopAndUnloadAsync();
+                } catch (e: any) {
+                    // SILENTLY ignore "no valid audio data" error here
+                    if (!e?.message?.includes('no valid audio data')) {
+                        console.log("Error unloading discarded recording", e);
+                    }
+                }
+                // Release lock since we are done with this attempt
+                audioLock.current = false;
+                return;
+            }
+
+            recordingRef.current = newRecording;
+            setIsRecording(true);
+            console.log('Recording started');
+            // Lock stays TRUE until stopRecording is called by user action
+
+        } catch (err) {
+            console.error('Failed to start recording', err);
+            audioLock.current = false; // Release lock on error
+        }
+    }
+
+    async function stopRecording() {
+        console.log('Button released (stopRecording called)');
+        isPressedRef.current = false;
+
+        // If no recording ref, just return. 
+        if (!recordingRef.current) {
+            setIsRecording(false);
+            return;
+        }
+
+        setIsRecording(false);
+        const recording = recordingRef.current;
+        recordingRef.current = null; // Clear ref immediately
+
+        try {
+            await recording.stopAndUnloadAsync();
+            const uri = recording.getURI();
+
+            // Check if recording was successful/long enough
+            const status = await recording.getStatusAsync();
+            if (status.isDoneRecording && status.durationMillis < 200) { // Reduced to 200ms
+                console.log(`Recording too short (${status.durationMillis}ms), discarding.`);
+            } else if (uri) {
+                console.log('Recording stopped and stored at', uri);
+                uploadAndSend(uri);
+            }
+        } catch (error: any) {
+            // Handle specific errors
+            if (error.message && error.message.includes("no valid audio data")) {
+                console.log("Recording stopped with no valid audio data (too short?). Discarding.");
+            } else {
+                console.error('Error stopping recording:', error);
+            }
+        } finally {
+            // Always release lock when done stopping an active recording
+            audioLock.current = false;
+        }
+    }
+
+    async function uploadAndSend(uri: string) {
+        if (!currentUser) return;
+
+        try {
+            console.log('Starting upload for:', uri);
+
+            // 1. Read file
+            const response = await fetch(uri);
+            const arrayBuffer = await response.arrayBuffer();
+            const fileName = `${tripId}/${Date.now()}.m4a`;
+
+            console.log('File read, uploading to Supabase...', arrayBuffer.byteLength);
+
+            // 2. Upload to Supabase Storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('voice-messages')
+                .upload(fileName, arrayBuffer, {
+                    contentType: 'audio/m4a',
+                    upsert: false,
+                });
+
+            if (uploadError) {
+                console.error('Supabase Upload Error details:', uploadError);
+                Alert.alert("Upload Failed", `Could not upload audio: ${uploadError.message}`);
+                return;
+            }
+
+            console.log('Upload successful:', uploadData);
+
+            // 3. Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('voice-messages')
+                .getPublicUrl(fileName);
+
+            // 4. Insert into 'voice_messages' table
+            const { error: dbError } = await supabase
+                .from('voice_messages')
+                .insert({
+                    trip_id: tripId,
+                    user_id: currentUser.id,
+                    public_url: publicUrl,
+                    duration: 0, // Optional: Calculate duration if possible
+                });
+
+            if (dbError) {
+                console.error("Database insert error:", dbError);
+                // Don't alert user if only DB insert failed but upload worked, just log it. 
+                // Or strictly, it's a failure.
+            } else {
+                console.log('Voice message record created.');
+            }
+
+        } catch (error: any) {
+            console.error('Error in uploadAndSend:', error);
+            Alert.alert('Error', `Failed to send message: ${error.message || error}`);
+        }
+    }
+
+    async function playAudio(url: string) {
+        try {
+            setIsPlaying(true);
+
+            // Stop previous sound if any
+            if (soundRef.current) {
+                await soundRef.current.unloadAsync();
+            }
+
+            const { sound } = await Audio.Sound.createAsync(
+                { uri: url },
+                { shouldPlay: true }
+            );
+            soundRef.current = sound;
+
+            sound.setOnPlaybackStatusUpdate((status) => {
+                if (status.isLoaded && status.didJustFinish) {
+                    setIsPlaying(false);
+                    setSpeakerName(null);
+                }
+            });
+
+        } catch (error) {
+            console.error('Error playing audio:', error);
+            setIsPlaying(false);
+            setSpeakerName(null);
+        }
+    }
+
+    return (
+        <View style={styles.container}>
+            {/* Status Display */}
+            {isPlaying && (
+                <View style={styles.statusPill}>
+                    <Volume2 size={16} color="#10b981" />
+                    <Text style={styles.statusText}>{speakerName} is talking...</Text>
+                </View>
+            )}
+
+            <View style={styles.controls}>
+                {/* Mute Toggle */}
+                <TouchableOpacity
+                    style={[styles.smallButton, isMuted && styles.mutedButton]}
+                    onPress={() => setIsMuted(!isMuted)}
+                >
+                    {isMuted ? (
+                        <VolumeX size={20} color="white" />
+                    ) : (
+                        <Volume2 size={20} color="#1e293b" />
+                    )}
+                </TouchableOpacity>
+
+                {/* Push to Talk Button */}
+                <TouchableOpacity
+                    style={[
+                        styles.pttButton,
+                        isRecording && styles.pttButtonActive
+                    ]}
+                    onPressIn={startRecording}
+                    onPressOut={stopRecording}
+                    activeOpacity={0.7}
+                >
+                    {isRecording ? (
+                        <View style={styles.recordingIndicator} />
+                    ) : (
+                        <Mic size={32} color="white" />
+                    )}
+                </TouchableOpacity>
+
+                {/* Placeholder for symmetry or other controls */}
+                <View style={{ width: 44 }} />
+            </View>
+
+            <Text style={styles.hintText}>
+                {isRecording ? "Release to Send" : "Hold to Talk"}
+            </Text>
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        position: 'absolute',
+        bottom: 80, // Slightly lower, closer to nav
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        paddingBottom: 20, // Safe area
+        zIndex: 100, // Ensure it sits on top
+    },
+    controls: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 32, // Better spacing
+    },
+    statusPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        marginBottom: 20,
+        gap: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    statusText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#10b981',
+    },
+    smallButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'white',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    mutedButton: {
+        backgroundColor: '#ef4444',
+    },
+    pttButton: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: '#3b82f6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 4,
+        borderColor: 'rgba(59, 130, 246, 0.3)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    pttButtonActive: {
+        backgroundColor: '#ef4444', // Red when recording
+        borderColor: 'rgba(239, 68, 68, 0.3)',
+        // transform: [{ scale: 1.1 }], // Removing scale to avoid layout shift cancelling touch
+        borderWidth: 6, // Make border thicker instead for feedback
+    },
+    recordingIndicator: {
+        width: 24,
+        height: 24,
+        borderRadius: 4,
+        backgroundColor: 'white',
+    },
+    hintText: {
+        marginTop: 12,
+        color: '#64748b',
+        fontSize: 12,
+        fontWeight: '600',
+        textShadowColor: 'rgba(255,255,255,0.8)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
+    }
+});
