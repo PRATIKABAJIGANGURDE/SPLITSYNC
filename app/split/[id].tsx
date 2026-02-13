@@ -29,6 +29,7 @@ import {
   Plus,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import PaymentModal from "@/components/PaymentModal";
 
 export default function SplitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -138,127 +139,14 @@ export default function SplitDetailScreen() {
     setPaymentModalVisible(true);
   };
 
-  const handleUpiPayment = async () => {
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      Alert.alert("Invalid Amount", "Please enter a valid amount");
-      return;
-    }
-
-    if (!creator?.upiId) {
-      Alert.alert(
-        "UPI ID Missing",
-        "The split creator has not set their UPI ID. Please ask them to add it in their profile."
-      );
-      return;
-    }
-
-    const payAmount = parseFloat(amount);
-    const upiUrl = `upi://pay?pa=${creator.upiId}&pn=${encodeURIComponent(
-      creator.name
-    )}&tn=${encodeURIComponent(split.name)}&am=${payAmount}&cu=INR`;
-
+  const handlePaymentComplete = async (amount: number, method: 'upi' | 'manual') => {
     try {
-      const canOpen = await Linking.canOpenURL(upiUrl);
-      if (canOpen) {
-        await Linking.openURL(upiUrl);
-
-        // Wait for 6 seconds before asking for confirmation
-        // This gives user time to perform payment in UPI app
-        setTimeout(() => {
-          Alert.alert(
-            "Payment Confirmation",
-            "Did you complete the payment in the UPI app?",
-            [
-              { text: "No", style: "cancel" },
-              {
-                text: "Yes, Payment Done",
-                onPress: async () => {
-                  setIsPaying(true);
-                  try {
-                    await recordPayment(split.id, payAmount);
-                    setPaymentModalVisible(false);
-                    Alert.alert("Success", "Payment recorded! Waiting for approval.");
-                    fetchPayments();
-                  } catch (error) {
-                    Alert.alert("Error", "Failed to record payment");
-                  } finally {
-                    setIsPaying(false);
-                  }
-                },
-              },
-            ]
-          );
-        }, 6000);
-      } else {
-        // Fallback if no UPI app found
-        Alert.alert(
-          "UPI App Not Found",
-          "We couldn't find a supported UPI app. Do you want to mark this as paid manually?",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Mark as Paid",
-              onPress: async () => {
-                setIsPaying(true);
-                try {
-                  await recordPayment(split.id, payAmount);
-                  setPaymentModalVisible(false);
-                  Alert.alert("Success", "Payment recorded! Waiting for approval.");
-                  fetchPayments();
-                } catch (error) {
-                  Alert.alert("Error", "Failed to record payment");
-                } finally {
-                  setIsPaying(false);
-                }
-              },
-            },
-          ]
-        );
-      }
-    } catch (error) {
-      // Fallback on error
-      Alert.alert(
-        "Error Opening UPI",
-        "Failed to open UPI app. Do you want to mark this as paid manually?",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Mark as Paid",
-            onPress: async () => {
-              setIsPaying(true);
-              try {
-                await recordPayment(split.id, payAmount);
-                setPaymentModalVisible(false);
-                Alert.alert("Success", "Payment recorded! Waiting for approval.");
-                fetchPayments();
-              } catch (error) {
-                Alert.alert("Error", "Failed to record payment");
-              } finally {
-                setIsPaying(false);
-              }
-            },
-          },
-        ]
-      );
-    }
-  };
-
-  const handleManualPayment = async () => {
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      Alert.alert("Invalid Amount", "Please enter a valid amount");
-      return;
-    }
-
-    setIsPaying(true);
-    try {
-      await recordPayment(split.id, parseFloat(amount));
+      await recordPayment(split.id, amount);
       setPaymentModalVisible(false);
       Alert.alert("Success", "Payment recorded! Waiting for approval.");
       fetchPayments();
     } catch (error) {
       Alert.alert("Error", "Failed to record payment");
-    } finally {
-      setIsPaying(false);
     }
   };
 
@@ -578,65 +466,15 @@ export default function SplitDetailScreen() {
 
       {/* Payment Modal */}
       {paymentModalVisible && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Make Payment</Text>
-            <Text style={styles.modalSubtitle}>Enter amount to pay</Text>
-
-            <View style={styles.amountInputContainer}>
-              <Text style={styles.currencySymbol}>₹</Text>
-              <TextInput
-                style={styles.amountInput}
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="numeric"
-                placeholder="0"
-              />
-            </View>
-
-            <Text style={styles.helperText}>
-              Remaining to pay: ₹{myPendingAmount.toFixed(2)}
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.upiButton, isPaying && styles.disabledButton]}
-              onPress={handleUpiPayment}
-              disabled={isPaying}
-            >
-              <LinearGradient
-                colors={["#2563eb", "#1d4ed8"]}
-                style={styles.upiButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                {isPaying ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <>
-                    <Text style={styles.upiButtonText}>Pay with UPI</Text>
-                    <ChevronRight size={20} color="#ffffff" />
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.manualButton, isPaying && styles.disabledButton]}
-              onPress={handleManualPayment}
-              disabled={isPaying}
-            >
-              <Text style={styles.manualButtonText}>Mark as Paid (Cash/Other)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setPaymentModalVisible(false)}
-              disabled={isPaying}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <PaymentModal
+          visible={paymentModalVisible}
+          onClose={() => setPaymentModalVisible(false)}
+          onPaymentComplete={handlePaymentComplete}
+          recipientName={creator?.name || "Split Creator"}
+          recipientUpiId={creator?.upiId}
+          defaultAmount={myPendingAmount - myPendingApprovalAmount}
+          note={split.name}
+        />
       )}
     </View>
   );

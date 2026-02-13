@@ -36,6 +36,7 @@ import type { Split, TripEvent, ActivityItem } from "@/types";
 import * as Clipboard from "expo-clipboard";
 
 import LiveMap from "@/components/LiveMap";
+import PaymentModal from "@/components/PaymentModal";
 
 type ViewMode = "planning" | "expense" | "map";
 type ExpenseTab = "splits" | "members" | "summary" | "activity";
@@ -52,12 +53,28 @@ export default function TripDashboardScreen() {
     deleteEvent,
     deleteTrip,
     getTripActivity,
+    recordPayment,
+    refreshData,
   } = useApp();
 
   const [viewMode, setViewMode] = useState<ViewMode>("expense");
   const [expenseTab, setExpenseTab] = useState<ExpenseTab>("splits");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [settleParams, setSettleParams] = useState<{
+    visible: boolean;
+    recipientId: string;
+    recipientName: string;
+    recipientUpi?: string;
+    amount: number;
+    splitIds: string[];
+  }>({
+    visible: false,
+    recipientId: '',
+    recipientName: '',
+    amount: 0,
+    splitIds: [],
+  });
 
   useEffect(() => {
     if (expenseTab === "activity" && id) {
@@ -149,34 +166,110 @@ export default function TripDashboardScreen() {
     ]);
   };
 
-  const calculateSummary = () => {
-    let totalOwed = 0;
-    let totalOwedToYou = 0;
-    let pendingApprovals = 0;
+  const calculateBalances = () => {
+    // Map of userId -> amount (positive means you owe them, negative means they owe you)
+    const balances: Record<string, number> = {};
+    const details: {
+      userId: string;
+      amount: number;
+      splitIds: string[];
+    }[] = [];
 
     splits.forEach((split) => {
-      const myMember = split.members.find((m) => m.userId === currentUser?.id);
-      if (myMember) {
-        if (myMember.status === "not_paid") {
-          totalOwed += myMember.amount;
-        } else if (myMember.status === "pending_approval") {
-          pendingApprovals++;
-        }
-      }
-
+      // If I am the creator, check who owes me
       if (split.creatorId === currentUser?.id) {
         split.members.forEach((member) => {
           if (member.userId !== currentUser?.id && member.status !== "approved") {
-            totalOwedToYou += member.amount;
+            // They owe me
+            balances[member.userId] = (balances[member.userId] || 0) - member.amount;
           }
         });
+      } else {
+        // If someone else created it, check if I owe them
+        const myMember = split.members.find((m) => m.userId === currentUser?.id);
+        if (myMember && (myMember.status === "not_paid" || myMember.status === "pending_approval")) {
+          // I owe them.
+          // Note: We include pending_approval here because technically it's not "settled" until approved,
+          // but for "Pay All", we might only want to pay what is NOT paid.
+          // Let's filter for 'not_paid' for the Settle Up action, but show total pending including approvals for view.
+          const amount = myMember.amount;
+          balances[split.creatorId] = (balances[split.creatorId] || 0) + amount;
+
+          if (myMember.status === "not_paid") {
+            const existingDetail = details.find(d => d.userId === split.creatorId);
+            if (existingDetail) {
+              existingDetail.amount += amount;
+              existingDetail.splitIds.push(split.id);
+            } else {
+              details.push({
+                userId: split.creatorId,
+                amount: amount,
+                splitIds: [split.id]
+              });
+            }
+          }
+        }
       }
     });
 
-    return { totalOwed, totalOwedToYou, pendingApprovals };
+    // Format for UI
+    const owedByYou = Object.entries(balances)
+      .filter(([_, amount]) => amount > 0)
+      .map(([userId, amount]) => ({ userId, amount }));
+
+    const owedToYou = Object.entries(balances)
+      .filter(([_, amount]) => amount < 0)
+      .map(([userId, amount]) => ({ userId, amount: Math.abs(amount) }));
+
+    return { owedByYou, owedToYou, payableDetails: details };
   };
 
-  const summary = calculateSummary();
+  const balances = calculateBalances();
+
+  const handleSettleUp = (userId: string) => {
+    const detail = balances.payableDetails.find(d => d.userId === userId);
+    if (!detail || detail.amount <= 0) {
+      Alert.alert("Nothing to Pay", "You don't have any unpaid splits with this person.");
+      return;
+    }
+
+    const user = getUserById(userId);
+    setSettleParams({
+      visible: true,
+      recipientId: userId,
+      recipientName: user?.name || "Member",
+      recipientUpi: user?.upiId,
+      amount: detail.amount,
+      splitIds: detail.splitIds,
+    });
+  };
+
+  const onSettlePaymentComplete = async (amount: number, method: 'upi' | 'manual') => {
+    try {
+      // Record payment for EACH split
+      // Distribute the total amount proportionally or just mark them paid?
+      // Since we calculated the exact total of specific splits, we should loop and pay them.
+      // However, recordPayment doesn't take 'splitIds'. It takes 'splitId'.
+      // Implementation: We will call recordPayment for each split.
+
+      let paidCount = 0;
+      for (const splitId of settleParams.splitIds) {
+        const split = splits.find(s => s.id === splitId);
+        const myMember = split?.members.find(m => m.userId === currentUser?.id);
+        if (split && myMember) {
+          await recordPayment(split.id, myMember.amount);
+          paidCount++;
+        }
+      }
+
+      setSettleParams(prev => ({ ...prev, visible: false }));
+      Alert.alert("Success", `Recorded payments for ${paidCount} splits! Waiting for approval.`);
+      await refreshData();
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Failed to record some payments. Please try again.");
+    }
+  };
 
   function timeAgo(dateString: string) {
     const date = new Date(dateString);
@@ -413,24 +506,70 @@ export default function TripDashboardScreen() {
         </ScrollView>
       ) : expenseTab === "summary" ? (
         <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total Splits</Text>
-              <Text style={styles.summaryValue}>{splits.length}</Text>
+          {balances.owedByYou.length === 0 && balances.owedToYou.length === 0 ? (
+            <View style={styles.emptyState}>
+              <CheckCircle size={48} color="#10b981" />
+              <Text style={styles.emptyStateTitle}>All Settled Up!</Text>
+              <Text style={styles.emptyStateText}>You don't owe anyone, and no one owes you.</Text>
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>You Owe</Text>
-              <Text style={[styles.summaryValue, styles.summaryOwed]}>₹{summary.totalOwed}</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Owed to You</Text>
-              <Text style={[styles.summaryValue, styles.summaryOwedToYou]}>
-                ₹{summary.totalOwedToYou}
-              </Text>
-            </View>
-          </View>
+          ) : (
+            <>
+              {balances.owedByYou.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>You Owe</Text>
+                  {balances.owedByYou.map((item) => {
+                    const user = getUserById(item.userId);
+                    return (
+                      <View key={item.userId} style={styles.balanceCard}>
+                        <View style={styles.memberInfo}>
+                          <View style={styles.memberAvatar}>
+                            <Text style={styles.memberAvatarText}>{user?.name?.[0] || "?"}</Text>
+                          </View>
+                          <View>
+                            <Text style={styles.memberName}>{user?.name}</Text>
+                            <Text style={[styles.balanceAmount, { color: '#ef4444' }]}>
+                              ₹{item.amount.toFixed(2)}
+                            </Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.payAllButton}
+                          onPress={() => handleSettleUp(item.userId)}
+                        >
+                          <Text style={styles.payAllButtonText}>Pay All</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {balances.owedToYou.length > 0 && (
+                <View style={[styles.section, { marginTop: 12 }]}>
+                  <Text style={styles.sectionTitle}>Owed to You</Text>
+                  {balances.owedToYou.map((item) => {
+                    const user = getUserById(item.userId);
+                    return (
+                      <View key={item.userId} style={styles.balanceCard}>
+                        <View style={styles.memberInfo}>
+                          <View style={styles.memberAvatar}>
+                            <Text style={styles.memberAvatarText}>{user?.name?.[0] || "?"}</Text>
+                          </View>
+                          <View>
+                            <Text style={styles.memberName}>{user?.name}</Text>
+                            <Text style={[styles.balanceAmount, { color: '#10b981' }]}>
+                              ₹{item.amount.toFixed(2)}
+                            </Text>
+                          </View>
+                        </View>
+                        {/* We could add a 'Remind All' button here later */}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </>
+          )}
         </ScrollView>
       ) : (
         renderActivityView()
@@ -613,6 +752,15 @@ export default function TripDashboardScreen() {
           </TouchableOpacity>
         </BlurView>
       </View>
+      <PaymentModal
+        visible={settleParams.visible}
+        onClose={() => setSettleParams(prev => ({ ...prev, visible: false }))}
+        onPaymentComplete={onSettlePaymentComplete}
+        recipientName={settleParams.recipientName}
+        recipientUpiId={settleParams.recipientUpi}
+        defaultAmount={settleParams.amount}
+        note={`Settle Up (${settleParams.splitIds.length} splits)`}
+      />
     </View>
   );
 }
@@ -1114,5 +1262,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#0f172a",
+  },
+  balanceCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  balanceAmount: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  payAllButton: {
+    backgroundColor: "#10b981",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  payAllButtonText: {
+    color: "#ffffff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#0f172a",
+    marginBottom: 12,
+  },
+  section: {
+    marginBottom: 24,
   },
 });
