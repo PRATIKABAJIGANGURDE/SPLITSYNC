@@ -1,0 +1,15 @@
+[31mPluginError: Package "expo-web-browser" does not contain a valid config plugin.[39m
+[31mLearn more: https://docs.expo.dev/guides/config-plugins/#creating-a-plugin[39m
+[31m[39m
+[31mUnexpected token 'typeof'[39m
+[90mSyntaxError: Unexpected token 'typeof'[39m
+[90m    at compileSourceTextModule (node:internal/modules/esm/utils:346:16)[39m
+[90m    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:107:18)[39m
+[90m    at #translate (node:internal/modules/esm/loader:536:12)[39m
+[90m    at ModuleLoader.getModuleJobForRequire (node:internal/modules/esm/loader:489:33)[39m
+[90m    at new ModuleJobSync (node:internal/modules/esm/module_job:393:34)[39m
+[90m    at ModuleLoader.importSyncForRequire (node:internal/modules/esm/loader:426:11)[39m
+[90m    at loadESMFromCJS (node:internal/modules/cjs/loader:1519:24)[39m
+[90m    at Module._compile (node:internal/modules/cjs/loader:1670:5)[39m
+[90m    at Object..js (node:internal/modules/cjs/loader:1820:10)[39m
+[90m    at Module.load (node:internal/modules/cjs/loader:1423:32)[39m

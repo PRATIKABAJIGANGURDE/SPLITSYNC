@@ -1,0 +1,54 @@
+[31mError: Cannot find module 'ajv/dist/compile/codegen'[39m
+[31mRequire stack:[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\definitions\typeof.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\keywords\typeof.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\keywords\index.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\index.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\schema-utils\dist\validate.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\schema-utils\dist\index.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\expo-router\plugin\build\index.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\expo-router\app.plugin.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config-plugins\build\utils\plugin-resolver.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config-plugins\build\plugins\withStaticPlugin.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config-plugins\build\plugins\withPlugins.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config-plugins\build\index.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config\build\plugins\withConfigPlugins.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config\build\Config.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config\build\index.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\cli\build\src\start\detectDevClient.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\cli\build\src\start\resolveOptions.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\cli\build\src\start\index.js[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\cli\build\bin\cli[39m
+[31m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\expo\bin\cli[39m
+[90mError: Cannot find module 'ajv/dist/compile/codegen'[39m
+[90mRequire stack:[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\definitions\typeof.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\keywords\typeof.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\keywords\index.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\index.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\schema-utils\dist\validate.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\schema-utils\dist\index.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\expo-router\plugin\build\index.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\expo-router\app.plugin.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config-plugins\build\utils\plugin-resolver.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config-plugins\build\plugins\withStaticPlugin.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config-plugins\build\plugins\withPlugins.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config-plugins\build\index.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config\build\plugins\withConfigPlugins.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config\build\Config.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\config\build\index.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\cli\build\src\start\detectDevClient.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\cli\build\src\start\resolveOptions.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\cli\build\src\start\index.js[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\@expo\cli\build\bin\cli[39m
+[90m- C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\expo\bin\cli[39m
+[90m    at Function._resolveFilename (node:internal/modules/cjs/loader:1365:15)[39m
+[90m    at defaultResolveImpl (node:internal/modules/cjs/loader:1021:19)[39m
+[90m    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1026:22)[39m
+[90m    at Function._load (node:internal/modules/cjs/loader:1175:37)[39m
+[90m    at TracingChannel.traceSync (node:diagnostics_channel:322:14)[39m
+[90m    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)[39m
+[90m    at Module.require (node:internal/modules/cjs/loader:1445:12)[39m
+[90m    at require (node:internal/modules/helpers:135:16)[39m
+[90m    at Object.<anonymous> (C:\Users\Pratik\OneDrive\Desktop\project\coding\SPLITSYNC\node_modules\ajv-keywords\dist\definitions\typeof.js:3:19)[39m
+[90m    at Module._compile (node:internal/modules/cjs/loader:1688:14)[39m
