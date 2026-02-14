@@ -12,10 +12,13 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { Receipt, Check, ChevronLeft } from "lucide-react-native";
+import { Receipt, Check, ChevronLeft, Camera, ScanLine } from "lucide-react-native";
 import type { SplitType } from "@/types";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import { processBillImage } from "@/utils/ocr";
+import BillScanner from "@/components/BillScanner";
+import { Modal } from "react-native";
 
 export default function CreateSplitScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
@@ -26,9 +29,13 @@ export default function CreateSplitScreen() {
 
   const [splitName, setSplitName] = useState<string>("");
   const [totalAmount, setTotalAmount] = useState<string>("");
+  const [taxAmount, setTaxAmount] = useState<string>("");
   const [splitType, setSplitType] = useState<SplitType>("equal");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const toggleMember = (memberId: string) => {
     if (selectedMembers.includes(memberId)) {
@@ -45,15 +52,47 @@ export default function CreateSplitScreen() {
     setCustomAmounts({ ...customAmounts, [memberId]: amount });
   };
 
+  const handleScanBill = () => {
+    setShowScanner(true);
+  };
+
+  const handleScannerCapture = async (base64: string) => {
+    setShowScanner(false);
+    try {
+      setIsScanning(true);
+      // Small delay to allow modal to close smoothly before potentially heavy processing
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const result = await processBillImage(base64);
+      if (result) {
+        if (result.billAmount) setTotalAmount(result.billAmount.toString());
+        if (result.taxAmount) {
+          setTaxAmount(result.taxAmount.toString());
+          setAdvancedMode(true);
+        }
+        if (result.totalAmount && !result.billAmount) {
+          setTotalAmount(result.totalAmount.toString());
+        }
+        Alert.alert("Scanned!", "Bill details extracted successfully.");
+      }
+    } catch (error) {
+      Alert.alert("Error", error instanceof Error ? error.message : "Failed to scan bill");
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const handleCreateSplit = () => {
     if (!splitName.trim()) {
       Alert.alert("Error", "Please enter a split name");
       return;
     }
 
-    const amount = parseFloat(totalAmount);
-    if (isNaN(amount) || amount <= 0) {
-      Alert.alert("Error", "Please enter a valid amount");
+    const bill = parseFloat(totalAmount);
+    const tax = parseFloat(taxAmount) || 0;
+
+    if (isNaN(bill) || bill <= 0) {
+      Alert.alert("Error", "Please enter a valid bill amount");
       return;
     }
 
@@ -62,35 +101,52 @@ export default function CreateSplitScreen() {
       return;
     }
 
+    const finalTotal = bill + tax;
     let memberAmounts: { userId: string; amount: number }[];
 
+    // Calculate Tax Split (Always Equal)
+    const perPersonTax = tax / selectedMembers.length;
+
     if (splitType === "equal") {
-      const perPersonAmount = amount / selectedMembers.length;
+      const perPersonBill = bill / selectedMembers.length;
+      const perPersonTotal = perPersonBill + perPersonTax;
+
       memberAmounts = selectedMembers.map((userId) => ({
         userId,
-        amount: Math.round(perPersonAmount * 100) / 100,
+        amount: Math.round(perPersonTotal * 100) / 100,
       }));
     } else {
-      memberAmounts = selectedMembers.map((userId) => {
-        const customAmount = parseFloat(customAmounts[userId] || "0");
-        return { userId, amount: customAmount };
+      // Custom Split for Bill Amount
+      const computedMemberAmounts = selectedMembers.map((userId) => {
+        const customBillShare = parseFloat(customAmounts[userId] || "0");
+        return {
+          userId,
+          billShare: customBillShare,
+          amount: Math.round((customBillShare + perPersonTax) * 100) / 100
+        };
       });
 
-      const totalCustom = memberAmounts.reduce((sum, m) => sum + m.amount, 0);
-      if (Math.abs(totalCustom - amount) > 0.01) {
+      const totalCustomBill = computedMemberAmounts.reduce((sum, m) => sum + m.billShare, 0);
+
+      // Allow small float error
+      if (Math.abs(totalCustomBill - bill) > 0.1) {
         Alert.alert(
           "Error",
-          `Custom amounts (₹${totalCustom}) must equal total amount (₹${amount})`
+          `Custom amounts (₹${totalCustomBill}) must equal Bill Amount (₹${bill})`
         );
         return;
       }
+
+      memberAmounts = computedMemberAmounts.map(({ userId, amount }) => ({ userId, amount }));
     }
 
     try {
       createSplit({
         tripId,
         name: splitName.trim(),
-        totalAmount: amount,
+        totalAmount: finalTotal,
+        billAmount: bill,
+        taxAmount: tax,
         type: splitType,
         members: memberAmounts,
       });
@@ -143,6 +199,10 @@ export default function CreateSplitScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.iconContainer}>
             <Receipt size={56} color="#10b981" strokeWidth={2} />
+            <TouchableOpacity onPress={handleScanBill} style={styles.scanButton}>
+              <Camera size={20} color="#fff" />
+              <Text style={styles.scanButtonText}>Scan Bill</Text>
+            </TouchableOpacity>
           </View>
 
           <Text style={styles.subtitle}>Split expenses with your trip members</Text>
@@ -159,7 +219,14 @@ export default function CreateSplitScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>Total Amount (₹)</Text>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>Bill Amount (₹)</Text>
+              <TouchableOpacity onPress={() => setAdvancedMode(!advancedMode)}>
+                <Text style={styles.linkText}>
+                  {advancedMode ? "Simple Mode" : "Add Tax / Advanced"}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               style={styles.input}
               placeholder="0.00"
@@ -169,6 +236,23 @@ export default function CreateSplitScreen() {
               keyboardType="decimal-pad"
             />
           </View>
+
+          {advancedMode && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Tax / GST Amount (₹)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="0.00"
+                placeholderTextColor="#94a3b8"
+                value={taxAmount}
+                onChangeText={setTaxAmount}
+                keyboardType="decimal-pad"
+              />
+              <Text style={styles.helperText}>
+                Tax is always split equally. Total: ₹{((parseFloat(totalAmount) || 0) + (parseFloat(taxAmount) || 0)).toFixed(2)}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.section}>
             <Text style={styles.label}>Split Type</Text>
@@ -228,20 +312,30 @@ export default function CreateSplitScreen() {
                   </TouchableOpacity>
 
                   {isSelected && splitType === "custom" && (
-                    <TextInput
-                      style={styles.customAmountInput}
-                      placeholder="₹0.00"
-                      placeholderTextColor="#94a3b8"
-                      value={customAmounts[member!.id] || ""}
-                      onChangeText={(amount) => updateCustomAmount(member!.id, amount)}
-                      keyboardType="decimal-pad"
-                    />
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <TextInput
+                        style={styles.customAmountInput}
+                        placeholder="₹0.00"
+                        placeholderTextColor="#94a3b8"
+                        value={customAmounts[member!.id] || ""}
+                        onChangeText={(amount) => updateCustomAmount(member!.id, amount)}
+                        keyboardType="decimal-pad"
+                      />
+                      {advancedMode && (parseFloat(taxAmount) > 0) && (
+                        <Text style={styles.taxShareText}>+ ₹{(parseFloat(taxAmount) / selectedMembers.length).toFixed(2)} tax</Text>
+                      )}
+                    </View>
                   )}
 
                   {isSelected && splitType === "equal" && (
-                    <Text style={styles.equalAmount}>
-                      ₹{isNaN(equalAmount) ? "0.00" : equalAmount.toFixed(2)}
-                    </Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.equalAmount}>
+                        ₹{isNaN(equalAmount) ? "0.00" : (equalAmount + ((parseFloat(taxAmount) || 0) / selectedMembers.length)).toFixed(2)}
+                      </Text>
+                      {advancedMode && (parseFloat(taxAmount) > 0) && (
+                        <Text style={styles.taxShareText}>incl. tax</Text>
+                      )}
+                    </View>
                   )}
                 </View>
               );
@@ -257,6 +351,12 @@ export default function CreateSplitScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+      <Modal visible={showScanner} animationType="slide" presentationStyle="fullScreen">
+        <BillScanner
+          onCapture={handleScannerCapture}
+          onClose={() => setShowScanner(false)}
+        />
+      </Modal>
     </View>
   );
 }
@@ -422,5 +522,41 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 18,
     color: "#64748b",
+  },
+  scanButton: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#3b82f6",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  scanButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  linkText: {
+    color: "#3b82f6",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  helperText: {
+    fontSize: 13,
+    color: "#64748b",
+    marginTop: 6,
+  },
+  taxShareText: {
+    fontSize: 11,
+    color: "#94a3b8",
+    marginTop: 2,
   },
 });

@@ -258,6 +258,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
             tripId: split.trip_id,
             name: split.name,
             totalAmount: parseFloat(split.total_amount),
+            billAmount: split.bill_amount ? parseFloat(split.bill_amount) : undefined,
+            taxAmount: split.tax_amount ? parseFloat(split.tax_amount) : undefined,
             type: split.type as SplitType,
             creatorId: split.creator_id,
             members:
@@ -638,12 +640,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
       tripId,
       name,
       totalAmount,
+      billAmount,
+      taxAmount,
       type,
       members,
     }: {
       tripId: string;
       name: string;
       totalAmount: number;
+      billAmount?: number;
+      taxAmount?: number;
       type: SplitType;
       members: { userId: string; amount: number }[];
     }) => {
@@ -655,6 +661,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
           trip_id: tripId,
           name,
           total_amount: totalAmount,
+          bill_amount: billAmount,
+          tax_amount: taxAmount,
           type,
           creator_id: currentUser.id,
         })
@@ -681,6 +689,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
         tripId: split.trip_id,
         name: split.name,
         totalAmount: parseFloat(split.total_amount),
+        billAmount: split.bill_amount ? parseFloat(split.bill_amount) : undefined,
+        taxAmount: split.tax_amount ? parseFloat(split.tax_amount) : undefined,
         type: split.type as SplitType,
         creatorId: split.creator_id,
         members: members.map((m) => ({

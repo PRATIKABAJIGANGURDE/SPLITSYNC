@@ -40,7 +40,8 @@
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "CAMERA"
       ]
     },
     "web": {
@@ -72,6 +73,12 @@
         "expo-av",
         {
           "microphonePermission": "Allow SplitSync to access your microphone to send walkie-talkie messages."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SplitSync to access your camera to scan bills."
         }
       ]
     ],

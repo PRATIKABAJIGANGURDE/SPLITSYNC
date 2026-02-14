@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase';
 import MemberMarker from './MemberMarker';
 import WalkieTalkie from './WalkieTalkie';
 import * as Battery from 'expo-battery';
+import LeafletMap from './LeafletMap';
 
 interface LiveMapProps {
     trip: Trip;
@@ -138,63 +139,66 @@ export default function LiveMap({ trip, currentUserId }: LiveMapProps) {
 
     return (
         <View style={styles.container}>
-            <MapView
-                ref={mapRef}
-                style={styles.map}
-                provider={
-                    Platform.OS === 'android'
-                        ? PROVIDER_GOOGLE
-                        : PROVIDER_DEFAULT
-                }
-                initialRegion={region}
-                showsUserLocation={false}
-                showsMyLocationButton={false}
-                onPress={() => setSelectedMember(null)}
-            >
-                {currentLocation && (
-                    <MemberMarker
-                        id="current-user"
-                        coordinate={{
-                            latitude: currentLocation.coords.latitude,
-                            longitude: currentLocation.coords.longitude,
-                        }}
-                        user={{
-                            name: userData?.name || 'You',
-                            photo_url: userData?.photo_url,
-                        }}
-                        isCurrentUser
-                        onPress={() => setSelectedMember({
-                            id: 'current-user',
-                            users: { name: 'You', photo_url: userData?.photo_url },
-                            battery_level: -1,
-                            speed: currentLocation.coords.speed,
-                            updated_at: new Date().toISOString()
-                        })}
-                    />
-                )}
-
-                {otherMembersLocations.map((loc) => {
-                    if (loc.user_id === currentUserId) return null;
-
-                    return (
+            {Platform.OS === 'android' ? (
+                <LeafletMap
+                    currentLocation={currentLocation}
+                    otherMembersLocations={otherMembersLocations}
+                />
+            ) : (
+                <MapView
+                    ref={mapRef}
+                    style={styles.map}
+                    provider={PROVIDER_DEFAULT}
+                    initialRegion={region}
+                    showsUserLocation={false}
+                    showsMyLocationButton={false}
+                    onPress={() => setSelectedMember(null)}
+                >
+                    {currentLocation && (
                         <MemberMarker
-                            key={loc.id}
-                            id={loc.id}
+                            id="current-user"
                             coordinate={{
-                                latitude: loc.latitude,
-                                longitude: loc.longitude,
+                                latitude: currentLocation.coords.latitude,
+                                longitude: currentLocation.coords.longitude,
                             }}
                             user={{
-                                name: loc.users?.name || 'Member',
-                                photo_url: loc.users?.photo_url,
+                                name: userData?.name || 'You',
+                                photo_url: userData?.photo_url,
                             }}
-                            batteryLevel={loc.battery_level}
-                            batteryState={loc.battery_state}
-                            onPress={() => setSelectedMember(loc)}
+                            isCurrentUser
+                            onPress={() => setSelectedMember({
+                                id: 'current-user',
+                                users: { name: 'You', photo_url: userData?.photo_url },
+                                battery_level: -1,
+                                speed: currentLocation.coords.speed,
+                                updated_at: new Date().toISOString()
+                            })}
                         />
-                    );
-                })}
-            </MapView>
+                    )}
+
+                    {otherMembersLocations.map((loc) => {
+                        if (loc.user_id === currentUserId) return null;
+
+                        return (
+                            <MemberMarker
+                                key={loc.id}
+                                id={loc.id}
+                                coordinate={{
+                                    latitude: loc.latitude,
+                                    longitude: loc.longitude,
+                                }}
+                                user={{
+                                    name: loc.users?.name || 'Member',
+                                    photo_url: loc.users?.photo_url,
+                                }}
+                                batteryLevel={loc.battery_level}
+                                batteryState={loc.battery_state}
+                                onPress={() => setSelectedMember(loc)}
+                            />
+                        );
+                    })}
+                </MapView>
+            )}
 
             {/* Top Controls */}
             <View style={styles.topControls}>

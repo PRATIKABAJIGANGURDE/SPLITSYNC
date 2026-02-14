@@ -43,6 +43,8 @@ export interface Split {
   members: SplitMember[];
   createdAt: string;
   updated_at?: string;
+  billAmount?: number;
+  taxAmount?: number;
 }
 
 export interface Notification {
