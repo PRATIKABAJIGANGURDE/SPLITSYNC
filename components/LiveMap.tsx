@@ -143,6 +143,20 @@ export default function LiveMap({ trip, currentUserId }: LiveMapProps) {
                 <LeafletMap
                     currentLocation={currentLocation}
                     otherMembersLocations={otherMembersLocations}
+                    onMemberSelect={(id) => {
+                        if (id === 'current-user') {
+                            setSelectedMember({
+                                id: 'current-user',
+                                users: { name: 'You', photo_url: userData?.photo_url },
+                                battery_level: -1,
+                                speed: currentLocation?.coords.speed,
+                                updated_at: new Date().toISOString()
+                            });
+                        } else {
+                            const member = otherMembersLocations.find(m => m.id === id);
+                            if (member) setSelectedMember(member);
+                        }
+                    }}
                 />
             ) : (
                 <MapView

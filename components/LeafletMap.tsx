@@ -9,7 +9,11 @@ interface LeafletMapProps {
     children?: React.ReactNode;
 }
 
-const LeafletMap = ({ currentLocation, otherMembersLocations }: LeafletMapProps) => {
+const LeafletMap = ({ currentLocation, otherMembersLocations, onMemberSelect }: {
+    currentLocation: Location.LocationObject | null;
+    otherMembersLocations: any[];
+    onMemberSelect?: (id: string) => void;
+}) => {
     const webViewRef = useRef<WebView>(null);
     const [mapLoaded, setMapLoaded] = useState(false);
 
@@ -24,17 +28,75 @@ const LeafletMap = ({ currentLocation, otherMembersLocations }: LeafletMapProps)
             <style>
                 body { margin: 0; padding: 0; }
                 #map { height: 100vh; width: 100vw; }
-                .custom-marker {
-                    background-color: #3b82f6;
-                    border: 2px solid white;
+                
+                .marker-container {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    width: auto !important;
+                    height: auto !important;
+                    background: transparent;
+                }
+
+                .avatar-box {
+                    width: 44px;
+                    height: 44px;
                     border-radius: 50%;
-                    width: 24px;
-                    height: 24px;
+                    background-color: white;
+                    border: 3px solid #3b82f6;
+                    overflow: hidden;
                     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    position: relative;
+                    z-index: 10;
                 }
-                .member-marker {
-                    background-color: #10b981;
+
+                .avatar-box.is-me {
+                    border-color: #10b981;
                 }
+
+                .avatar-img {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                }
+
+                .avatar-text {
+                    font-family: sans-serif;
+                    font-weight: bold;
+                    font-size: 18px;
+                    color: #475569;
+                }
+
+                .name-tag {
+                    margin-top: 4px;
+                    background-color: rgba(255,255,255,0.95);
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    border: 1px solid #e2e8f0;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                    font-family: sans-serif;
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: #1e293b;
+                    white-space: nowrap;
+                    z-index: 5;
+                }
+
+                .arrow {
+                    width: 0; 
+                    height: 0; 
+                    border-left: 6px solid transparent;
+                    border-right: 6px solid transparent;
+                    border-top: 8px solid #3b82f6;
+                    margin-top: -2px;
+                    z-index: 9;
+                }
+                .is-me .arrow { border-top-color: #10b981; }
+
             </style>
         </head>
         <body>
@@ -52,7 +114,24 @@ const LeafletMap = ({ currentLocation, otherMembersLocations }: LeafletMapProps)
                 var markers = {};
                 var myMarker = null;
 
-                // Function to update map from React Native
+                function createIconHTML(member, isMe) {
+                    var name = member.users?.name || (isMe ? 'You' : 'Member');
+                    var initial = name.charAt(0).toUpperCase();
+                    var photo = member.users?.photo_url;
+                    
+                    var avatarContent = photo 
+                        ? '<img src="' + photo + '" class="avatar-img" />'
+                        : '<span class="avatar-text">' + initial + '</span>';
+
+                    var wrapperClass = isMe ? 'marker-container is-me' : 'marker-container';
+
+                    return '<div class="' + wrapperClass + '">' +
+                           '<div class="avatar-box ' + (isMe ? 'is-me' : '') + '">' + avatarContent + '</div>' +
+                           '<div class="arrow"></div>' +
+                           '<div class="name-tag">' + name + '</div>' +
+                           '</div>';
+                }
+
                 window.updateMap = function(data) {
                     var parsed = JSON.parse(data);
                     var current = parsed.currentLocation;
@@ -63,15 +142,24 @@ const LeafletMap = ({ currentLocation, otherMembersLocations }: LeafletMapProps)
                         var lng = current.coords.longitude;
                         
                         if (!myMarker) {
-                             var myIcon = L.divIcon({className: 'custom-marker'});
+                             var html = createIconHTML({users: {name: 'You', photo_url: null}}, true); // Pass true for isMe
+                             var myIcon = L.divIcon({
+                                 className: 'custom-div-icon',
+                                 html: html,
+                                 iconSize: [60, 80],
+                                 iconAnchor: [30, 50]
+                             });
                              myMarker = L.marker([lat, lng], {icon: myIcon}).addTo(map);
+                             myMarker.on('click', function() {
+                                 window.ReactNativeWebView.postMessage(JSON.stringify({type: 'marker_click', id: 'current-user'}));
+                             });
                              map.setView([lat, lng], 15);
                         } else {
                             myMarker.setLatLng([lat, lng]);
                         }
                     }
 
-                    // Handle other members
+                    // Remove old
                     Object.keys(markers).forEach(function(id) {
                         if (!others.find(function(m) { return m.id === id; })) {
                             map.removeLayer(markers[id]);
@@ -79,14 +167,25 @@ const LeafletMap = ({ currentLocation, otherMembersLocations }: LeafletMapProps)
                         }
                     });
 
+                    // Update/Add new
                     others.forEach(function(member) {
                         if (markers[member.id]) {
                             markers[member.id].setLatLng([member.latitude, member.longitude]);
                         } else {
-                            var memberIcon = L.divIcon({className: 'custom-marker member-marker'});
+                            var html = createIconHTML(member, false);
+                            var memberIcon = L.divIcon({
+                                 className: 'custom-div-icon',
+                                 html: html,
+                                 iconSize: [60, 80],
+                                 iconAnchor: [30, 50]
+                            });
+                             
                             markers[member.id] = L.marker([member.latitude, member.longitude], {icon: memberIcon})
-                                .bindPopup(member.users?.name || 'Member')
                                 .addTo(map);
+                            
+                            markers[member.id].on('click', function() {
+                                window.ReactNativeWebView.postMessage(JSON.stringify({type: 'marker_click', id: member.id}));
+                            });
                         }
                     });
                 }
@@ -105,6 +204,17 @@ const LeafletMap = ({ currentLocation, otherMembersLocations }: LeafletMapProps)
         }
     }, [currentLocation, otherMembersLocations, mapLoaded]);
 
+    const handleMessage = (event: any) => {
+        try {
+            const data = JSON.parse(event.nativeEvent.data);
+            if (data.type === 'marker_click' && onMemberSelect) {
+                onMemberSelect(data.id);
+            }
+        } catch (e) {
+            // ignore
+        }
+    };
+
     return (
         <View style={styles.container}>
             <WebView
@@ -115,6 +225,7 @@ const LeafletMap = ({ currentLocation, otherMembersLocations }: LeafletMapProps)
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
                 originWhitelist={['*']}
+                onMessage={handleMessage}
             />
             {!mapLoaded && (
                 <View style={[styles.container, styles.loadingOverlay]}>
