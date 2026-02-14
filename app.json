@@ -23,7 +23,8 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "SplitSync needs your location to share your position with trip members even when the app is closed.",
         "NSLocationWhenInUseUsageDescription": "SplitSync needs your location to share your position with trip members.",
         "NSLocationAlwaysUsageDescription": "SplitSync needs your location to share your position with trip members even when the app is closed.",
-        "NSMicrophoneUsageDescription": "SplitSync needs access to your microphone to send walkie-talkie voice messages to your trip members."
+        "NSMicrophoneUsageDescription": "SplitSync needs access to your microphone to send walkie-talkie voice messages to your trip members.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
