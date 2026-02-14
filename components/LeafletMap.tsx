@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
@@ -9,13 +9,23 @@ interface LeafletMapProps {
     children?: React.ReactNode;
 }
 
-const LeafletMap = ({ currentLocation, otherMembersLocations, onMemberSelect }: {
+export interface LeafletMapRef {
+    flyTo: (latitude: number, longitude: number) => void;
+}
+
+const LeafletMap = forwardRef<LeafletMapRef, {
     currentLocation: Location.LocationObject | null;
     otherMembersLocations: any[];
     onMemberSelect?: (id: string) => void;
-}) => {
+}>(({ currentLocation, otherMembersLocations, onMemberSelect }, ref) => {
     const webViewRef = useRef<WebView>(null);
     const [mapLoaded, setMapLoaded] = useState(false);
+
+    useImperativeHandle(ref, () => ({
+        flyTo: (latitude, longitude) => {
+            webViewRef.current?.injectJavaScript(`map.flyTo([${latitude}, ${longitude}], 16); true;`);
+        }
+    }));
 
     // Initial HTML setup for Leaflet map
     const mapHTML = `
@@ -189,6 +199,7 @@ const LeafletMap = ({ currentLocation, otherMembersLocations, onMemberSelect }: 
                         }
                     });
                 }
+
             </script>
         </body>
         </html>
@@ -234,7 +245,7 @@ const LeafletMap = ({ currentLocation, otherMembersLocations, onMemberSelect }: 
             )}
         </View>
     );
-};
+});
 
 const styles = StyleSheet.create({
     container: {

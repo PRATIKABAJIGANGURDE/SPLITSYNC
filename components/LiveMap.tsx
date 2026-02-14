@@ -17,7 +17,7 @@ import { supabase } from '../lib/supabase';
 import MemberMarker from './MemberMarker';
 import WalkieTalkie from './WalkieTalkie';
 import * as Battery from 'expo-battery';
-import LeafletMap from './LeafletMap';
+import LeafletMap, { LeafletMapRef } from './LeafletMap';
 
 interface LiveMapProps {
     trip: Trip;
@@ -26,6 +26,7 @@ interface LiveMapProps {
 
 export default function LiveMap({ trip, currentUserId }: LiveMapProps) {
     const mapRef = useRef<MapView>(null);
+    const leafletRef = useRef<LeafletMapRef>(null);
     const { isSharing, toggleSharing, otherMembersLocations } =
         useLiveLocation(trip.id);
 
@@ -105,12 +106,17 @@ export default function LiveMap({ trip, currentUserId }: LiveMapProps) {
 
     const focusOnMe = async () => {
         const location = await Location.getCurrentPositionAsync({});
-        mapRef.current?.animateToRegion({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-        });
+
+        if (Platform.OS === 'android') {
+            leafletRef.current?.flyTo(location.coords.latitude, location.coords.longitude);
+        } else {
+            mapRef.current?.animateToRegion({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+            });
+        }
     };
 
     const getBatteryColor = (level: number, state: number) => {
@@ -141,6 +147,7 @@ export default function LiveMap({ trip, currentUserId }: LiveMapProps) {
         <View style={styles.container}>
             {Platform.OS === 'android' ? (
                 <LeafletMap
+                    ref={leafletRef}
                     currentLocation={currentLocation}
                     otherMembersLocations={otherMembersLocations}
                     onMemberSelect={(id) => {
