@@ -74,9 +74,9 @@ export default function LiveMap({ trip, currentUserId }: LiveMapProps) {
 
                 subscription = await Location.watchPositionAsync(
                     {
-                        accuracy: Location.Accuracy.High,
-                        timeInterval: 1000,
-                        distanceInterval: 1,
+                        accuracy: Location.Accuracy.Balanced,
+                        timeInterval: 5000,
+                        distanceInterval: 5,
                     },
                     (location) => {
                         setCurrentLocation(location);
@@ -149,7 +149,8 @@ export default function LiveMap({ trip, currentUserId }: LiveMapProps) {
                 <LeafletMap
                     ref={leafletRef}
                     currentLocation={currentLocation}
-                    otherMembersLocations={otherMembersLocations}
+                    userPhotoUrl={userData?.photo_url}
+                    otherMembersLocations={otherMembersLocations.filter(m => m.user_id !== currentUserId)}
                     onMemberSelect={(id) => {
                         if (id === 'current-user') {
                             setSelectedMember({

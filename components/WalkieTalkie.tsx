@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, Text, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Text, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
@@ -96,8 +96,10 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
         try {
             // Check permissions first
             if (permissionResponse?.status !== 'granted') {
+                console.log("Requesting permission...");
                 const { status } = await requestPermission();
                 if (status !== 'granted') {
+                    Alert.alert("Permission Required", "Please enable microphone access in your phone settings to use the Walkie-Talkie.");
                     audioLock.current = false;
                     return;
                 }
@@ -148,8 +150,9 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
             console.log('Recording started');
             // Lock stays TRUE until stopRecording is called by user action
 
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to start recording', err);
+            Alert.alert("Error", `Could not start recording: ${err.message || "Unknown error"}`);
             audioLock.current = false; // Release lock on error
         }
     }
@@ -199,17 +202,22 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
         try {
             console.log('Starting upload for:', uri);
 
-            // 1. Read file
-            const response = await fetch(uri);
-            const arrayBuffer = await response.arrayBuffer();
+            // 1. Create FormData for reliable Android upload
+            const formData = new FormData();
+            formData.append('file', {
+                uri: uri,
+                name: `voice_${Date.now()}.m4a`,
+                type: 'audio/m4a',
+            } as any);
+
             const fileName = `${tripId}/${Date.now()}.m4a`;
 
-            console.log('File read, uploading to Supabase...', arrayBuffer.byteLength);
+            console.log('Uploading formData to Supabase...');
 
             // 2. Upload to Supabase Storage
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('voice-messages')
-                .upload(fileName, arrayBuffer, {
+                .upload(fileName, formData, {
                     contentType: 'audio/m4a',
                     upsert: false,
                 });

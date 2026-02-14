@@ -16,8 +16,9 @@ export interface LeafletMapRef {
 const LeafletMap = forwardRef<LeafletMapRef, {
     currentLocation: Location.LocationObject | null;
     otherMembersLocations: any[];
+    userPhotoUrl?: string | null;
     onMemberSelect?: (id: string) => void;
-}>(({ currentLocation, otherMembersLocations, onMemberSelect }, ref) => {
+}>(({ currentLocation, otherMembersLocations, userPhotoUrl, onMemberSelect }, ref) => {
     const webViewRef = useRef<WebView>(null);
     const [mapLoaded, setMapLoaded] = useState(false);
 
@@ -152,7 +153,7 @@ const LeafletMap = forwardRef<LeafletMapRef, {
                         var lng = current.coords.longitude;
                         
                         if (!myMarker) {
-                             var html = createIconHTML({users: {name: 'You', photo_url: null}}, true); // Pass true for isMe
+                             var html = createIconHTML({users: {name: 'You', photo_url: parsed.userPhotoUrl}}, true); // Pass true for isMe
                              var myIcon = L.divIcon({
                                  className: 'custom-div-icon',
                                  html: html,
@@ -209,7 +210,8 @@ const LeafletMap = forwardRef<LeafletMapRef, {
         if (mapLoaded && currentLocation) {
             const data = JSON.stringify({
                 currentLocation,
-                others: otherMembersLocations
+                others: otherMembersLocations,
+                userPhotoUrl
             });
             webViewRef.current?.injectJavaScript(`window.updateMap('${data}'); true;`);
         }
