@@ -20,10 +20,16 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
     const [isPlaying, setIsPlaying] = useState(false);
     const [speakerName, setSpeakerName] = useState<string | null>(null);
     const soundRef = useRef<Audio.Sound | null>(null);
+    const isMutedRef = useRef(isMuted);
+
+    // Keep ref in sync
+    useEffect(() => {
+        isMutedRef.current = isMuted;
+    }, [isMuted]);
 
     // Subscribe to new voice messages
     useEffect(() => {
-        if (!tripId || !currentUser) return;
+        if (!tripId || !currentUser?.id) return;
 
         const channel = supabase
             .channel(`walkie-talkie:${tripId}`)
@@ -41,8 +47,8 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
                     // Don't play own messages
                     if (newMessage.user_id === currentUser.id) return;
 
-                    // Don't play if muted
-                    if (isMuted) return;
+                    // Don't play if muted (check ref)
+                    if (isMutedRef.current) return;
 
                     console.log('Received voice message:', newMessage);
 
@@ -55,21 +61,45 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
                             .single();
 
                         setSpeakerName(userData?.name || 'Someone');
-                        playAudio(newMessage.public_url);
+                        playAudio(newMessage.public_url, newMessage.id);
                     } catch (error) {
                         console.error('Error handling incoming voice message:', error);
                     }
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                console.log(`WalkieTalkie Subscription Status: ${status}`);
+                if (status === 'SUBSCRIBED') {
+                    console.log(`Listening for messages on trip: ${tripId}`);
+                }
+                if (status === 'CHANNEL_ERROR') {
+                    console.error('WalkieTalkie Subscription Error');
+                }
+            });
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [tripId, currentUser, isMuted]);
+    }, [tripId, currentUser?.id]); // Depend on ID, not object reference
 
     // Cleanup on unmount
     useEffect(() => {
+        // Configure audio mode immediately for playback
+        const configureAudio = async () => {
+            try {
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: true,
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: true,
+                    shouldDuckAndroid: true,
+                    playThroughEarpieceAndroid: false,
+                });
+            } catch (e) {
+                console.error('Error configuring audio session:', e);
+            }
+        };
+        configureAudio();
+
         return () => {
             isPressedRef.current = false;
             // Force release lock on unmount
@@ -124,9 +154,35 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
                 playThroughEarpieceAndroid: false,
             });
 
+            // Optimized for Voice (Low latency, smaller file size)
+            const voiceRecordingOptions: Audio.RecordingOptions = {
+                android: {
+                    extension: '.m4a',
+                    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+                    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+                    sampleRate: 16000, // Lower sample rate for voice
+                    numberOfChannels: 1, // Mono
+                    bitRate: 24000, // Lower bitrate (approx 3KB/sec)
+                },
+                ios: {
+                    extension: '.m4a',
+                    audioQuality: Audio.IOSAudioQuality.MEDIUM,
+                    sampleRate: 16000,
+                    numberOfChannels: 1,
+                    bitRate: 24000,
+                    linearPCMBitDepth: 16,
+                    linearPCMIsBigEndian: false,
+                    linearPCMIsFloat: false,
+                },
+                web: {
+                    mimeType: 'audio/webm',
+                    bitsPerSecond: 128000,
+                },
+            };
+
             // Start recording setup
             const { recording: newRecording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
+                voiceRecordingOptions
             );
 
             // CRITICAL CHECK: Did user release the button while we were loading?
@@ -259,7 +315,35 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
         }
     }
 
-    async function playAudio(url: string) {
+    async function deleteMessage(messageId: string, publicUrl: string) {
+        try {
+            console.log('Deleting played message:', messageId);
+
+            // 1. Delete from DB
+            const { error: dbError } = await supabase
+                .from('voice_messages')
+                .delete()
+                .eq('id', messageId);
+
+            if (dbError) console.error('Error deleting message row:', dbError);
+
+            // 2. Delete from Storage
+            // Extract path from public URL. Format usually: .../voice-messages/<path>
+            const path = publicUrl.split('/voice-messages/')[1];
+            if (path) {
+                const { error: storageError } = await supabase.storage
+                    .from('voice-messages')
+                    .remove([decodeURIComponent(path)]);
+
+                if (storageError) console.error('Error deleting message file:', storageError);
+            }
+
+        } catch (error) {
+            console.error('Failed to cleanup message:', error);
+        }
+    }
+
+    async function playAudio(url: string, messageId: string) {
         try {
             setIsPlaying(true);
 
@@ -278,6 +362,8 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
                 if (status.isLoaded && status.didJustFinish) {
                     setIsPlaying(false);
                     setSpeakerName(null);
+                    // Auto-delete after playing
+                    deleteMessage(messageId, url);
                 }
             });
 
