@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import * as Location from 'expo-location';
-import { Alert } from 'react-native';
+import { useAlert } from "@/context/AlertContext";
 import { supabase } from '../lib/supabase';
 import { LOCATION_TASK_NAME } from '../lib/locationTask';
 
 export const useLiveLocation = (tripId: string) => {
+    const { showAlert } = useAlert();
     const [isSharing, setIsSharing] = useState(false);
     const [permissionStatus, setPermissionStatus] = useState<Location.PermissionStatus | null>(null);
     const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
@@ -25,13 +26,13 @@ export const useLiveLocation = (tripId: string) => {
     const requestPermissions = async () => {
         const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
         if (fgStatus !== 'granted') {
-            Alert.alert('Permission Denied', 'We need location permission to share your live position.');
+            showAlert('Permission Denied', 'We need location permission to share your live position.');
             return false;
         }
 
         const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
         if (bgStatus !== 'granted') {
-            Alert.alert('Background Permission Denied', 'We need "Always Allow" permission to keep sharing location when the app is closed.');
+            showAlert('Background Permission Denied', 'We need "Always Allow" permission to keep sharing location when the app is closed.');
             return false;
         }
 
@@ -66,7 +67,7 @@ export const useLiveLocation = (tripId: string) => {
             }
         } catch (error) {
             console.error("Error toggling location:", error);
-            Alert.alert("Error", "Could not toggle location sharing.");
+            showAlert("Error", "Could not toggle location sharing.");
         }
     };
 

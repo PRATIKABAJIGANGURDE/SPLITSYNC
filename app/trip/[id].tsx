@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Share,
   Platform,
 } from "react-native";
@@ -12,6 +11,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useMemo, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
+import { useAlert } from "@/context/AlertContext";
 import {
   Receipt,
   Users,
@@ -56,6 +56,7 @@ export default function TripDashboardScreen() {
     recordPayment,
     refreshData,
   } = useApp();
+  const { showAlert } = useAlert();
 
   const [viewMode, setViewMode] = useState<ViewMode>("expense");
   const [expenseTab, setExpenseTab] = useState<ExpenseTab>("splits");
@@ -118,7 +119,7 @@ export default function TripDashboardScreen() {
 
   const handleCopyCode = async () => {
     await Clipboard.setStringAsync(trip.joinCode);
-    Alert.alert("Copied!", "Join code copied to clipboard");
+    showAlert("Copied!", "Join code copied to clipboard");
   };
 
   const handleShareCode = async () => {
@@ -132,7 +133,7 @@ export default function TripDashboardScreen() {
   };
 
   const handleDeleteTrip = () => {
-    Alert.alert("Delete Trip", "Are you sure you want to delete this trip? This action cannot be undone.", [
+    showAlert("Delete Trip", "Are you sure you want to delete this trip? This action cannot be undone.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -142,7 +143,7 @@ export default function TripDashboardScreen() {
             await deleteTrip(trip.id);
             router.replace("/");
           } catch (error) {
-            Alert.alert("Error", "Failed to delete trip");
+            showAlert("Error", "Failed to delete trip");
           }
         },
       },
@@ -150,7 +151,7 @@ export default function TripDashboardScreen() {
   };
 
   const handleDeleteEvent = (eventId: string) => {
-    Alert.alert("Delete Event", "Are you sure?", [
+    showAlert("Delete Event", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -159,7 +160,7 @@ export default function TripDashboardScreen() {
           try {
             await deleteEvent(eventId);
           } catch (error) {
-            Alert.alert("Error", "Failed to delete event");
+            showAlert("Error", "Failed to delete event");
           }
         },
       },
@@ -229,7 +230,7 @@ export default function TripDashboardScreen() {
   const handleSettleUp = (userId: string) => {
     const detail = balances.payableDetails.find(d => d.userId === userId);
     if (!detail || detail.amount <= 0) {
-      Alert.alert("Nothing to Pay", "You don't have any unpaid splits with this person.");
+      showAlert("Nothing to Pay", "You don't have any unpaid splits with this person.");
       return;
     }
 
@@ -263,11 +264,11 @@ export default function TripDashboardScreen() {
       }
 
       setSettleParams(prev => ({ ...prev, visible: false }));
-      Alert.alert("Success", `Recorded payments for ${paidCount} splits! Waiting for approval.`);
+      showAlert("Success", `Recorded payments for ${paidCount} splits! Waiting for approval.`);
       await refreshData();
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "Failed to record some payments. Please try again.");
+      showAlert("Error", "Failed to record some payments. Please try again.");
     }
   };
 
@@ -374,7 +375,7 @@ export default function TripDashboardScreen() {
             </View>
             <TouchableOpacity
               onPress={() => {
-                Alert.alert("Delete Split", "Are you sure?", [
+                showAlert("Delete Split", "Are you sure?", [
                   { text: "Cancel", style: "cancel" },
                   { text: "Delete", style: "destructive", onPress: () => { } } // TODO: Implement delete split from here if needed
                 ])

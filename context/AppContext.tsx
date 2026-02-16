@@ -182,6 +182,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
     []
   );
 
+
+
   const tripsQuery = useQuery({
     queryKey: ["trips", currentUser?.id],
     queryFn: async () => {
@@ -387,6 +389,46 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
     enabled: !!currentUser && tripsQuery.isSuccess,
   });
+
+  const sendPaymentReminder = useCallback(async (splitId: string, memberId: string) => {
+    if (!currentUser) throw new Error("User not logged in");
+
+    // 1. Get member details
+    const memberUser = usersQuery.data?.find(u => u.id === memberId);
+    if (!memberUser?.expoPushToken) {
+      throw new Error("User has no push token");
+    }
+
+    const split = splitsQuery.data?.find(s => s.id === splitId);
+    if (!split) throw new Error("Split not found");
+
+    // 2. Send Push Notification
+    await sendPushNotification(
+      memberUser.expoPushToken,
+      `Payment Reminder: ${split.name}`,
+      `Hey ${memberUser.name}, please pay your share of ₹${split.members.find(m => m.userId === memberId)?.amount} for "${split.name}"`
+    );
+
+    // 3. Update last_reminded_at
+    const { error } = await supabase
+      .from("split_members")
+      .update({ last_reminded_at: new Date().toISOString() })
+      .eq("split_id", splitId)
+      .eq("user_id", memberId);
+
+    if (error) throw error;
+
+    // 4. Record notification in DB
+    await supabase.from("notifications").insert({
+      user_id: memberId,
+      type: "payment_reminder",
+      title: `Payment Reminder: ${split.name}`,
+      message: `${currentUser.name} reminded you to pay ₹${split.members.find(m => m.userId === memberId)?.amount}`,
+      related_split_id: splitId,
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["splits"] });
+  }, [currentUser, usersQuery.data, splitsQuery.data, sendPushNotification, queryClient]);
 
   const signUpMutation = useMutation({
     mutationFn: async ({ email, password, name }: { email: string; password: string; name: string }) => {
@@ -644,6 +686,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       taxAmount,
       type,
       members,
+      items,
     }: {
       tripId: string;
       name: string;
@@ -652,6 +695,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       taxAmount?: number;
       type: SplitType;
       members: { userId: string; amount: number }[];
+      items?: { name: string; amount: number; assignedTo: string[] }[];
     }) => {
       if (!currentUser) throw new Error("User not logged in");
 
@@ -683,6 +727,22 @@ export const [AppProvider, useApp] = createContextHook(() => {
         );
 
       if (membersError) throw membersError;
+
+      // Insert Items if present
+      if (items && items.length > 0) {
+        const { error: itemsError } = await supabase
+          .from("split_items")
+          .insert(
+            items.map((item) => ({
+              split_id: split.id,
+              name: item.name,
+              amount: item.amount,
+              assigned_to: item.assignedTo,
+            }))
+          );
+
+        if (itemsError) throw itemsError;
+      }
 
       return {
         id: split.id,
@@ -1624,5 +1684,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
         notificationsQuery.refetch(),
       ]);
     },
+    sendPaymentReminder,
   };
 });

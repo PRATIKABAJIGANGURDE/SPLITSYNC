@@ -9,7 +9,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   ScrollView,
-  Alert,
   RefreshControl,
   Dimensions,
   StatusBar,
@@ -39,6 +38,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
+import { useAlert } from "@/context/AlertContext";
 
 const { width } = Dimensions.get("window");
 
@@ -59,6 +59,7 @@ export default function HomeScreen() {
     isResendingOtp,
     isLoading,
   } = useApp();
+  const { showAlert } = useAlert();
   const userTrips = getUserTrips() || [];
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
@@ -75,17 +76,17 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       if (!name.trim() || !email.trim() || !password.trim()) {
-        Alert.alert("Error", "Please fill in all fields");
+        showAlert("Error", "Please fill in all fields");
         return;
       }
 
       await signUp({ email: email.trim(), password, name: name.trim() });
       setAuthMode("verify");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Success", "Please check your email for verification code");
+      showAlert("Success", "Please check your email for verification code");
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to sign up");
+      showAlert("Error", error?.message || "Failed to sign up");
     }
   };
 
@@ -93,7 +94,7 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       if (!email.trim() || !password.trim()) {
-        Alert.alert("Error", "Please fill in all fields");
+        showAlert("Error", "Please fill in all fields");
         return;
       }
 
@@ -101,7 +102,7 @@ export default function HomeScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to log in");
+      showAlert("Error", error?.message || "Failed to log in");
     }
   };
 
@@ -112,7 +113,7 @@ export default function HomeScreen() {
       // Success is handled by the redirect and session update
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to sign in with Google");
+      showAlert("Error", error?.message || "Failed to sign in with Google");
     }
   };
 
@@ -120,16 +121,16 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       if (!otp.trim()) {
-        Alert.alert("Error", "Please enter the verification code");
+        showAlert("Error", "Please enter the verification code");
         return;
       }
 
       await verifyOtp({ email: email.trim(), otp: otp.trim() });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Success", "Email verified successfully!");
+      showAlert("Success", "Email verified successfully!");
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "Failed to verify OTP");
+      showAlert("Error", error?.message || "Failed to verify OTP");
     }
   };
 
@@ -137,15 +138,15 @@ export default function HomeScreen() {
     Haptics.selectionAsync();
     try {
       await resendOtp(email.trim());
-      Alert.alert("Success", "Verification code sent to your email");
+      showAlert("Success", "Verification code sent to your email");
     } catch (error: any) {
-      Alert.alert("Error", error?.message || "Failed to resend OTP");
+      showAlert("Error", error?.message || "Failed to resend OTP");
     }
   };
 
   const handleLogout = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert("Log Out", "Are you sure you want to log out?", [
+    showAlert("Log Out", "Are you sure you want to log out?", [
       {
         text: "Cancel",
         style: "cancel",

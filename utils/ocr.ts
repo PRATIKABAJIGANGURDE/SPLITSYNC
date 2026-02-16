@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 interface ScanResult {
     billAmount?: number;
@@ -8,69 +9,67 @@ interface ScanResult {
 }
 
 export const processBillImage = async (base64: string): Promise<ScanResult> => {
-    const apiKey = process.env.EXPO_PUBLIC_OCR_API_KEY || 'helloworld';
-    // Ensure base64 string has the data prefix if missing (though usually it might not need it for this API, but consistency helps)
-    // Actually OCR.space expects "data:image/..." or just base64? 
-    // The previous code did: `data:image/jpeg;base64,${result.assets[0].base64}`
-    // So let's ensure we have that.
-    const base64Img = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+
+    if (!apiKey) {
+        throw new Error("Gemini API Key is missing. Please add EXPO_PUBLIC_GEMINI_API_KEY to your .env file");
+    }
 
     try {
-        const formData = new FormData();
-        formData.append('base64Image', base64Img);
-        formData.append('language', 'eng');
-        formData.append('isOverlayRequired', 'false');
-        formData.append('detectOrientation', 'true');
-        formData.append('scale', 'true');
-        formData.append('OCREngine', '2');
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-        const response = await fetch('https://api.ocr.space/parse/image', {
-            method: 'POST',
-            headers: { 'apikey': apiKey },
-            body: formData,
-        });
+        // Remove data prefix if present for Gemini
+        const base64Data = base64.replace(/^data:image\/\w+;base64,/, "");
 
-        const data = await response.json();
-
-        if (data.IsErroredOnProcessing) {
-            throw new Error(data.ErrorMessage?.[0] || 'OCR Processing Failed');
+        const prompt = `
+        Analyze this receipt image. 
+        Extract the following:
+        1. Total Bill Amount (final total to pay).
+        2. Tax/GST Amount (if visible).
+        3. List of individual items with their prices.
+        
+        Return ONLY a raw JSON object (no markdown, no backticks) with this structure:
+        {
+          "billAmount": number,
+          "taxAmount": number, 
+          "totalAmount": number,
+          "items": [
+            { "name": "Item Name", "amount": number }
+          ]
         }
+        Do not include sub-items if they are part of a main item. Ignore "Total" or "Subtotal" lines in the items list.
+        `;
 
-        const parsedText = data.ParsedResults?.[0]?.ParsedText || "";
-        const lines = parsedText.split('\n');
-        let bill = 0;
-        let tax = 0;
-
-        const findAmount = (line: string) => {
-            const matches = line.match(/[\d,]+\.\d{2}/g) || line.match(/\d+/g);
-            if (matches) {
-                const val = parseFloat(matches[matches.length - 1].replace(/,/g, ''));
-                return isNaN(val) ? 0 : val;
-            }
-            return 0;
+        const imagePart = {
+            inlineData: {
+                data: base64Data,
+                mimeType: "image/jpeg",
+            },
         };
 
-        lines.forEach((line: string) => {
-            const lower = line.toLowerCase();
-            if ((lower.includes('total') || lower.includes('amount') || lower.includes('grand')) && !lower.includes('sub')) {
-                const val = findAmount(line);
-                if (val > bill) bill = val;
-            }
-            if (lower.includes('tax') || lower.includes('gst') || lower.includes('vat')) {
-                const val = findAmount(line);
-                if (val > tax && val < bill) tax = val;
-            }
-        });
+        const result = await model.generateContent([prompt, imagePart]);
+        const response = await result.response;
+        const text = response.text();
+
+        // Clean up markdown code blocks if Gemini returns them
+        const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        const data = JSON.parse(cleanedText);
 
         return {
-            billAmount: bill > 0 ? (bill - tax) : 0,
-            taxAmount: tax,
-            totalAmount: bill,
+            billAmount: parseFloat((data.billAmount || data.totalAmount).toFixed(2)), // Fallback
+            taxAmount: parseFloat((data.taxAmount || 0).toFixed(2)),
+            totalAmount: parseFloat(data.totalAmount.toFixed(2)),
+            items: (data.items || []).map((item: any) => ({
+                ...item,
+                amount: parseFloat(item.amount.toFixed(2))
+            })),
         };
 
     } catch (error) {
-        console.error("OCR Error:", error);
-        throw error;
+        console.error("Gemini OCR Error:", error);
+        throw new Error("Failed to parse receipt with AI. Please try again.");
     }
 };
 

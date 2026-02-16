@@ -7,9 +7,9 @@ import {
     TextInput,
     ActivityIndicator,
     Linking,
-    Alert,
     Modal,
 } from "react-native";
+import { useAlert } from "@/context/AlertContext";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronRight } from "lucide-react-native";
 
@@ -32,6 +32,7 @@ export default function PaymentModal({
     defaultAmount,
     note,
 }: PaymentModalProps) {
+    const { showAlert } = useAlert();
     const [amount, setAmount] = useState("");
     const [isPaying, setIsPaying] = useState(false);
 
@@ -45,12 +46,12 @@ export default function PaymentModal({
 
     const handleUpiPayment = async () => {
         if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-            Alert.alert("Invalid Amount", "Please enter a valid amount");
+            showAlert("Invalid Amount", "Please enter a valid amount");
             return;
         }
 
         if (!recipientUpiId) {
-            Alert.alert(
+            showAlert(
                 "UPI ID Missing",
                 `${recipientName} has not set their UPI ID. Please ask them to add it in their profile.`
             );
@@ -69,7 +70,7 @@ export default function PaymentModal({
 
                 // Wait for 6 seconds before asking for confirmation
                 setTimeout(() => {
-                    Alert.alert(
+                    showAlert(
                         "Payment Confirmation",
                         "Did you complete the payment in the UPI app?",
                         [
@@ -92,7 +93,7 @@ export default function PaymentModal({
                     );
                 }, 6000);
             } else {
-                Alert.alert(
+                showAlert(
                     "UPI App Not Found",
                     "We couldn't find a supported UPI app. Do you want to mark this as paid manually?",
                     [
@@ -107,7 +108,7 @@ export default function PaymentModal({
                 );
             }
         } catch (error) {
-            Alert.alert(
+            showAlert(
                 "Error Opening UPI",
                 "Failed to open UPI app. Do you want to mark this as paid manually?",
                 [
@@ -125,7 +126,7 @@ export default function PaymentModal({
 
     const handleManualPayment = async () => {
         if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-            Alert.alert("Invalid Amount", "Please enter a valid amount");
+            showAlert("Invalid Amount", "Please enter a valid amount");
             return;
         }
         handleManualPaymentWrapper(parseFloat(amount));

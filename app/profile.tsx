@@ -4,7 +4,6 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    Alert,
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
@@ -14,6 +13,7 @@ import {
 import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { useAlert } from "@/context/AlertContext";
 import { User, Save, CreditCard, ChevronLeft } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,6 +21,7 @@ import * as Haptics from "expo-haptics";
 
 export default function ProfileScreen() {
     const { currentUser, updateProfile, isLoading } = useApp();
+    const { showAlert } = useAlert();
     const [name, setName] = useState(currentUser?.name || "");
     const [upiId, setUpiId] = useState(currentUser?.upiId || "");
     const [isSaving, setIsSaving] = useState(false);
@@ -28,14 +29,14 @@ export default function ProfileScreen() {
     const handleSave = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         if (!name.trim()) {
-            Alert.alert("Error", "Name cannot be empty");
+            showAlert("Error", "Name cannot be empty");
             return;
         }
 
         // Validate UPI ID format
         const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
         if (upiId.trim() && !upiRegex.test(upiId.trim())) {
-            Alert.alert(
+            showAlert(
                 "Invalid UPI ID",
                 "Please enter a valid UPI ID (e.g., username@bank)"
             );
@@ -59,7 +60,7 @@ export default function ProfileScreen() {
         const hasValidHandle = validHandles.some(handle => upiId.trim().toLowerCase().endsWith(handle));
 
         if (upiId.trim() && !hasValidHandle) {
-            Alert.alert(
+            showAlert(
                 "Unknown UPI Handle",
                 "The bank handle (part after @) doesn't look familiar. Are you sure it's correct?",
                 [
@@ -84,12 +85,12 @@ export default function ProfileScreen() {
         try {
             await updateProfile(name.trim(), upiId.trim());
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert("Success", "Profile updated successfully", [
+            showAlert("Success", "Profile updated successfully", [
                 { text: "OK", onPress: () => router.back() },
             ]);
         } catch (error) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            Alert.alert("Error", "Failed to update profile");
+            showAlert("Error", "Failed to update profile");
         } finally {
             setIsSaving(false);
         }
@@ -97,7 +98,7 @@ export default function ProfileScreen() {
 
     const handleVerify = async () => {
         if (!upiId.trim()) {
-            Alert.alert("Error", "Please enter a UPI ID first");
+            showAlert("Error", "Please enter a UPI ID first");
             return;
         }
 
@@ -105,7 +106,7 @@ export default function ProfileScreen() {
         try {
             const canOpen = await Linking.canOpenURL(upiUrl);
             if (canOpen) {
-                Alert.alert(
+                showAlert(
                     "Verify UPI ID",
                     "We will open your UPI app with a ₹1 payment request. You DO NOT need to pay. Just check if the name displayed matches your account.\n\nIf the UPI ID is invalid, the app will tell you.",
                     [
@@ -117,10 +118,10 @@ export default function ProfileScreen() {
                     ]
                 );
             } else {
-                Alert.alert("Error", "No UPI app found to verify");
+                showAlert("Error", "No UPI app found to verify");
             }
         } catch (error) {
-            Alert.alert("Error", "Failed to open UPI app");
+            showAlert("Error", "Failed to open UPI app");
         }
     };
 

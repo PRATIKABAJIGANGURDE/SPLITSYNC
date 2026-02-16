@@ -31,6 +31,7 @@ export interface SplitMember {
   status: PaymentStatus;
   markedPaidAt?: string;
   approvedAt?: string;
+  lastRemindedAt?: string;
 }
 
 export interface Split {
@@ -45,6 +46,14 @@ export interface Split {
   updated_at?: string;
   billAmount?: number;
   taxAmount?: number;
+  items?: SplitItem[];
+}
+
+export interface SplitItem {
+  id?: string;
+  name: string;
+  amount: number;
+  assignedTo: string[]; // userIds
 }
 
 export interface Notification {

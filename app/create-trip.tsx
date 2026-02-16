@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,25 +11,27 @@ import {
 import { router } from "expo-router";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { useAlert } from "@/context/AlertContext";
 import { MapPin, Loader, ChevronLeft } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
 export default function CreateTripScreen() {
   const { createTrip } = useApp();
+  const { showAlert } = useAlert();
   const [tripName, setTripName] = useState<string>("");
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
   const handleCreateTrip = async () => {
     if (!tripName.trim()) {
-      Alert.alert("Error", "Please enter a trip name");
+      showAlert("Error", "Please enter a trip name");
       return;
     }
 
     setIsCreating(true);
     try {
       const trip = await createTrip(tripName.trim());
-      Alert.alert(
+      showAlert(
         "Trip Created!",
         `Your trip "${trip.name}" has been created.\n\nJoin Code: ${trip.joinCode}\n\nShare this code with your friends!`,
         [
@@ -41,7 +42,7 @@ export default function CreateTripScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert("Error", error instanceof Error ? error.message : "Failed to create trip");
+      showAlert("Error", error instanceof Error ? error.message : "Failed to create trip");
     } finally {
       setIsCreating(false);
     }

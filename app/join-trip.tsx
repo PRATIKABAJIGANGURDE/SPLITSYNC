@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,18 +11,20 @@ import {
 import { router, Stack } from "expo-router";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { useAlert } from "@/context/AlertContext";
 import { Users, Loader, ChevronLeft } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
 export default function JoinTripScreen() {
   const { joinTrip } = useApp();
+  const { showAlert } = useAlert();
   const [joinCode, setJoinCode] = useState<string>("");
   const [isJoining, setIsJoining] = useState<boolean>(false);
 
   const handleJoinTrip = async () => {
     if (!joinCode.trim() || joinCode.trim().length !== 10) {
-      Alert.alert("Error", "Please enter a valid 10-digit join code");
+      showAlert("Error", "Please enter a valid 10-digit join code");
       return;
     }
 
@@ -31,12 +32,12 @@ export default function JoinTripScreen() {
     try {
       const trip = await joinTrip(joinCode.trim());
       if (!trip) {
-        Alert.alert("Error", "Invalid join code. Please check and try again.");
+        showAlert("Error", "Invalid join code. Please check and try again.");
         setIsJoining(false);
         return;
       }
 
-      Alert.alert(
+      showAlert(
         "Joined Successfully!",
         `You've joined "${trip.name}"`,
         [
@@ -47,7 +48,7 @@ export default function JoinTripScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert("Error", error instanceof Error ? error.message : "Failed to join trip");
+      showAlert("Error", error instanceof Error ? error.message : "Failed to join trip");
       setIsJoining(false);
     }
   };

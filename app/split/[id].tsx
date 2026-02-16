@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Share as RNShare,
   TextInput,
   ActivityIndicator,
@@ -15,6 +14,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useState, useEffect, useCallback } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
+import { useAlert } from "@/context/AlertContext";
 import { supabase } from "@/lib/supabase";
 import {
   Receipt,
@@ -27,6 +27,7 @@ import {
   Share2,
   Activity,
   Plus,
+  Bell,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import PaymentModal from "@/components/PaymentModal";
@@ -44,13 +45,16 @@ export default function SplitDetailScreen() {
     getSplitPayments,
     refreshData,
     rejectPayment,
+    sendPaymentReminder,
   } = useApp();
+  const { showAlert } = useAlert();
 
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [amount, setAmount] = useState("");
   const [isPaying, setIsPaying] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [remindingUserId, setRemindingUserId] = useState<string | null>(null);
 
   const split = getSplitById(id);
 
@@ -125,13 +129,13 @@ export default function SplitDetailScreen() {
 
   const handlePay = () => {
     if (myPendingAmount <= 0) {
-      Alert.alert("All Paid", "You have already paid your share!");
+      showAlert("All Paid", "You have already paid your share!");
       return;
     }
 
     const remainingToPay = myPendingAmount - myPendingApprovalAmount;
     if (remainingToPay <= 0.01) {
-      Alert.alert("Pending Approval", "Your payment is waiting for approval.");
+      showAlert("Pending Approval", "Your payment is waiting for approval.");
       return;
     }
 
@@ -143,16 +147,16 @@ export default function SplitDetailScreen() {
     try {
       await recordPayment(split.id, amount);
       setPaymentModalVisible(false);
-      Alert.alert("Success", "Payment recorded! Waiting for approval.");
+      showAlert("Success", "Payment recorded! Waiting for approval.");
       fetchPayments();
     } catch (error) {
-      Alert.alert("Error", "Failed to record payment");
+      showAlert("Error", "Failed to record payment");
     }
   };
 
   const handleApprove = (userId: string) => {
     const user = getUserById(userId);
-    Alert.alert(
+    showAlert(
       "Approve Payment",
       `Confirm that ${user?.name} has paid their share?`,
       [
@@ -163,10 +167,10 @@ export default function SplitDetailScreen() {
           onPress: async () => {
             try {
               await approvePayment({ splitId: split.id, userId });
-              Alert.alert("Success", `Payment approved for ${user?.name}`);
+              showAlert("Success", `Payment approved for ${user?.name}`);
               fetchPayments();
             } catch (error) {
-              Alert.alert("Error", "Failed to approve payment");
+              showAlert("Error", "Failed to approve payment");
             }
           },
         },
@@ -176,7 +180,7 @@ export default function SplitDetailScreen() {
 
   const handleReject = (userId: string) => {
     const user = getUserById(userId);
-    Alert.alert(
+    showAlert(
       "Reject Payment",
       `Are you sure you want to reject the payment from ${user?.name}?`,
       [
@@ -187,15 +191,29 @@ export default function SplitDetailScreen() {
           onPress: async () => {
             try {
               await rejectPayment({ splitId: split.id, userId });
-              Alert.alert("Rejected", `Payment rejected for ${user?.name}`);
+              showAlert("Rejected", `Payment rejected for ${user?.name}`);
               fetchPayments();
             } catch (error) {
-              Alert.alert("Error", "Failed to reject payment");
+              showAlert("Error", "Failed to reject payment");
             }
           },
         },
       ]
     );
+  };
+
+  const handlePushReminder = async (userId: string) => {
+    if (!sendPaymentReminder) return;
+    setRemindingUserId(userId);
+    try {
+      await sendPaymentReminder(split.id, userId);
+      showAlert("Sent", "Payment reminder sent!");
+    } catch (error: any) {
+      console.error("Error sending reminder:", error);
+      showAlert("Error", error.message || "Failed to send reminder.");
+    } finally {
+      setRemindingUserId(null);
+    }
   };
 
   const handleSendReminder = async (userId: string) => {
@@ -309,13 +327,27 @@ export default function SplitDetailScreen() {
             </View>
           )}
           {isCreator && !isMe && member.status === "not_paid" && memberPendingApprovalAmount <= 0 && (
-            <TouchableOpacity
-              style={styles.reminderButton}
-              onPress={() => handleSendReminder(member.userId)}
-              activeOpacity={0.7}
-            >
-              <MessageCircle size={16} color="#10b981" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={styles.reminderButton}
+                onPress={() => handlePushReminder(member.userId)}
+                activeOpacity={0.7}
+                disabled={remindingUserId === member.userId}
+              >
+                {remindingUserId === member.userId ? (
+                  <ActivityIndicator size="small" color="#10b981" />
+                ) : (
+                  <Bell size={16} color="#10b981" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.reminderButton}
+                onPress={() => handleSendReminder(member.userId)}
+                activeOpacity={0.7}
+              >
+                <MessageCircle size={16} color="#10b981" />
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </View>

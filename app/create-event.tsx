@@ -5,13 +5,13 @@ import {
     TextInput,
     TouchableOpacity,
     ScrollView,
-    Alert,
     KeyboardAvoidingView,
     Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { useAlert } from "@/context/AlertContext";
 import { Calendar, Clock, MapPin, ChevronLeft, Calendar as CalendarIcon } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,6 +20,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 export default function CreateEventScreen() {
     const { tripId } = useLocalSearchParams<{ tripId: string }>();
     const { createEvent, getTripById } = useApp();
+    const { showAlert } = useAlert();
 
     const trip = getTripById(tripId);
 
@@ -34,7 +35,7 @@ export default function CreateEventScreen() {
 
     const handleCreateEvent = async () => {
         if (!eventTitle.trim()) {
-            Alert.alert("Error", "Please enter an event title");
+            showAlert("Error", "Please enter an event title");
             return;
         }
 
@@ -55,7 +56,7 @@ export default function CreateEventScreen() {
         );
 
         if (end < start) {
-            Alert.alert("Error", "End time cannot be before start time");
+            showAlert("Error", "End time cannot be before start time");
             return;
         }
 
@@ -68,14 +69,14 @@ export default function CreateEventScreen() {
                 eventLocation.trim() || undefined,
                 eventDescription.trim() || undefined
             );
-            Alert.alert("Success", "Event created successfully!", [
+            showAlert("Success", "Event created successfully!", [
                 {
                     text: "OK",
                     onPress: () => router.back(),
                 },
             ]);
         } catch (error) {
-            Alert.alert("Error", "Failed to create event");
+            showAlert("Error", "Failed to create event");
         }
     };
 

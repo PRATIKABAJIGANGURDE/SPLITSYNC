@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, Text, ActivityIndicator, Alert, Platform } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Text, ActivityIndicator, Platform } from 'react-native';
+import { useAlert } from "@/context/AlertContext";
 import { Audio } from 'expo-av';
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
@@ -11,6 +12,7 @@ interface WalkieTalkieProps {
 }
 
 export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps) {
+    const { showAlert } = useAlert();
     const recordingRef = useRef<Audio.Recording | null>(null);
     const isPressedRef = useRef(false);
     const audioLock = useRef(false);
@@ -129,7 +131,7 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
                 console.log("Requesting permission...");
                 const { status } = await requestPermission();
                 if (status !== 'granted') {
-                    Alert.alert("Permission Required", "Please enable microphone access in your phone settings to use the Walkie-Talkie.");
+                    showAlert("Permission Required", "Please enable microphone access in your phone settings to use the Walkie-Talkie.");
                     audioLock.current = false;
                     return;
                 }
@@ -208,7 +210,7 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
 
         } catch (err: any) {
             console.error('Failed to start recording', err);
-            Alert.alert("Error", `Could not start recording: ${err.message || "Unknown error"}`);
+            showAlert("Error", `Could not start recording: ${err.message || "Unknown error"}`);
             audioLock.current = false; // Release lock on error
         }
     }
@@ -280,7 +282,7 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
 
             if (uploadError) {
                 console.error('Supabase Upload Error details:', uploadError);
-                Alert.alert("Upload Failed", `Could not upload audio: ${uploadError.message}`);
+                showAlert("Upload Failed", `Could not upload audio: ${uploadError.message}`);
                 return;
             }
 
@@ -311,7 +313,7 @@ export default function WalkieTalkie({ tripId, currentUser }: WalkieTalkieProps)
 
         } catch (error: any) {
             console.error('Error in uploadAndSend:', error);
-            Alert.alert('Error', `Failed to send message: ${error.message || error}`);
+            showAlert('Error', `Failed to send message: ${error.message || error}`);
         }
     }
 
